@@ -1,0 +1,133 @@
+2025-09-26 09:09:55 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 09:09:12 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 09:09:41 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 09:09:71 [[32minfo[39m]: Login attempt by: asifandh@gmail.com
+2025-09-26 09:09:89 [[33mwarn[39m]: Login failed(user not found: asifandh@gmail.com)
+2025-09-26 11:09:95 [[32minfo[39m]: Login attempt by: asifandh@gmail.com
+2025-09-26 11:09:04 [[33mwarn[39m]: Login failed(user not found: asifandh@gmail.com)
+2025-09-26 14:09:22 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 14:09:08 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-26 14:09:36 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 14:09:84 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-26 14:09:19 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 14:09:49 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-26 14:09:57 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-26 14:09:22 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-26 14:09:66 [[32minfo[39m]: register attempt by asifandhi@gmail.com
+2025-09-26 14:09:94 [[33mwarn[39m]: existing user asifandhi@gmail.com
+2025-09-26 14:09:26 [[32minfo[39m]: register attempt by asifandhi1@gmail.com
+2025-09-26 14:09:85 [[32minfo[39m]: Register Sucess: asifandhi1@gmail.com
+2025-09-26 14:09:83 [[32minfo[39m]: Login attempt by: asifandhi1@gmail.com
+2025-09-26 14:09:28 [[32minfo[39m]: login success: asifandhi1@gmail.com, role: user
+2025-09-27 09:09:35 [[32minfo[39m]: [0mGET /api/auth/login [33m404[0m 5.046 ms - 153[0m
+2025-09-27 09:09:19 [[32minfo[39m]: [0mGET /api/auth/login [33m404[0m 1.142 ms - 153[0m
+2025-09-27 09:09:09 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-27 09:09:75 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-27 09:09:39 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-27 09:09:81 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-27 09:09:27 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2025-09-27 09:09:60 [[32minfo[39m]: login success: asifandhi0@gmail.com, role: user
+2025-09-27 09:09:99 [[32minfo[39m]: register attempt by asifandhi25@gmail.com
+2025-09-27 09:09:67 [[32minfo[39m]: Register Sucess: asifandhi25@gmail.com
+2025-09-27 11:09:55 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-27 11:09:37 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-27 11:09:39 [[32minfo[39m]: register attempt by asifandhi256@gmail.com
+2025-09-27 11:09:91 [[32minfo[39m]: Register Sucess: asifandhi256@gmail.com
+2025-09-27 11:09:31 [[32minfo[39m]: register attempt by asifandhi2567@gmail.com
+2025-09-27 11:09:67 [[32minfo[39m]: Register Sucess: asifandhi2567@gmail.com
+2025-09-27 11:09:59 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-27 11:09:97 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-27 11:09:45 [[32minfo[39m]: register attempt by asifandhi55@gmail.com
+2025-09-27 11:09:84 [[32minfo[39m]: Register Sucess: asifandhi55@gmail.com
+2025-09-27 11:09:49 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2025-09-27 11:09:87 [[32minfo[39m]: login success: asifandhi0@gmail.com, role: user
+2025-09-27 11:09:84 [[32minfo[39m]: register attempt by asifandhi10@gmail.com
+2025-09-27 11:09:25 [[32minfo[39m]: Register Sucess: asifandhi10@gmail.com
+2025-09-27 11:09:36 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2025-09-27 11:09:75 [[32minfo[39m]: login success: asifandhi0@gmail.com, role: user
+2025-09-27 11:09:92 [[32minfo[39m]: register attempt by asifandhi01@gmail.com
+2025-09-27 11:09:28 [[32minfo[39m]: Register Sucess: asifandhi01@gmail.com
+2025-09-27 11:09:70 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-27 11:09:16 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-27 11:09:60 [[32minfo[39m]: [0mGET /api/auth/getuser [33m404[0m 5.600 ms - 155[0m
+2025-09-27 16:09:38 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2025-09-27 16:09:85 [[32minfo[39m]: login success: asifandhi0@gmail.com, role: user
+2025-09-27 16:09:24 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-27 16:09:90 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-27 16:09:57 [[32minfo[39m]: [0mPUT /api/auth/update/2 [33m404[0m 3.847 ms - 156[0m
+2025-09-27 16:09:24 [[32minfo[39m]: [0mPUT /api/auth/update/2 [33m404[0m 1.056 ms - 156[0m
+2025-09-27 16:09:14 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2025-09-27 16:09:67 [[32minfo[39m]: login success: asifandhi0@gmail.com, role: superadmin
+2025-09-27 16:09:48 [[32minfo[39m]: [0mPOST /api/auth/users [33m404[0m 2.611 ms - 154[0m
+2025-09-27 16:09:34 [[32minfo[39m]: Login attempt by: asifandhi@gmail.com
+2025-09-27 16:09:80 [[32minfo[39m]: login success: asifandhi@gmail.com, role: admin
+2025-09-27 16:09:53 [[32minfo[39m]: Login attempt by: asifandhi123@gmail.com
+2025-09-27 16:09:98 [[32minfo[39m]: login success: asifandhi123@gmail.com, role: user
+2025-09-27 16:09:65 [[32minfo[39m]: [0mPOST /api/auth/update/1 [33m404[0m 0.530 ms - 157[0m
+2025-09-27 19:09:78 [[32minfo[39m]: [0mDELETE /api/auth/delete/1 [33m404[0m 5.546 ms - 159[0m
+2025-09-27 19:09:68 [[32minfo[39m]: [0mDELETE /api/auth/delete/1 [33m404[0m 4.234 ms - 159[0m
+2025-09-27 19:09:30 [[32minfo[39m]: [0mDELETE /api/auth/delete/2 [33m404[0m 1.406 ms - 159[0m
+2025-09-27 19:09:79 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-27 19:09:35 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-27 19:09:08 [[32minfo[39m]: [0mPOST /api/auth/users [33m404[0m 0.812 ms - 154[0m
+2025-09-27 19:09:56 [[32minfo[39m]: [0mDELETE /api/auth/delete/3 [33m404[0m 1.225 ms - 159[0m
+2025-09-27 19:09:66 [[32minfo[39m]: [0mPOST /api/auth/users [33m404[0m 3.516 ms - 154[0m
+2025-09-27 19:09:58 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-27 19:09:16 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-27 19:09:72 [[32minfo[39m]: register attempt by asifandhi250@gmail.com
+2025-09-27 19:09:28 [[32minfo[39m]: Register Sucess: asifandhi250@gmail.com
+2025-09-27 22:09:13 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-27 22:09:77 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-28 00:09:79 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-28 00:09:39 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-28 00:09:74 [[32minfo[39m]: [0mDELETE /api/auth/delete [33m404[0m 5.164 ms - 157[0m
+2025-09-29 16:09:21 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-29 16:09:59 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-29 23:09:43 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:66 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:06 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:12 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:45 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:65 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:06 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:36 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:73 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:91 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:50 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:70 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:29 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:33 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:88 [[32minfo[39m]: Login attempt by: undefined
+2025-09-29 23:09:21 [[31merror[39m]: login error for  undefined: Illegal arguments: undefined, string
+2025-09-29 23:09:92 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-29 23:09:46 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-29 23:09:27 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-29 23:09:58 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-29 23:09:73 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-29 23:09:04 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:48 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:79 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:38 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:51 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:40 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:52 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:59 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:71 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:77 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:89 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:95 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:07 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:19 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:33 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:88 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:12 [[33mwarn[39m]: login failed (Wrong password): asifandhi25@gmail.com
+2025-09-30 22:09:98 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:23 [[33mwarn[39m]: login failed (Wrong password): asifandhi25@gmail.com
+2025-09-30 22:09:32 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:55 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:19 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:39 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:39 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:59 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-09-30 22:09:34 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-09-30 22:09:52 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
