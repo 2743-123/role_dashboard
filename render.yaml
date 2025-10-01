@@ -2,14 +2,14 @@ services:
   - type: web
     name: bricks-admin-backend
     env: node
-    region: oregon          # ya tumhare paas jo bhi region hai
-    plan: free              # abhi free rakh lo
-    buildCommand: "npm run build"
+    region: oregon                # apna region choose karna
+    plan: free                    # free plan theek hai testing ke liye
+    buildCommand: "npm install && npm run build"
     startCommand: "npm start"
     envVars:
       - key: PORT
         value: 5000
       - key: DB_URL
-        value: postgresql://role_db_2bh7_user:7DPyZeRZI5ftmEoiKPHPCP91yCg3bzXA@dpg-d3e1djmmcj7s73adkml0-a/role_db_2bh7
+        sync: false               # render dashboard se safe set karna
       - key: JWT_SECRET
-        value: myjwtsecret
+        sync: false
