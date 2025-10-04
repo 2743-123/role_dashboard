@@ -10,8 +10,14 @@ import dotenv from "dotenv"
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:3000", // ya "*" for all
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
+
+
 
 const PORT = process.env.PORT || 5000
 
