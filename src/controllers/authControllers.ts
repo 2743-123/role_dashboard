@@ -30,7 +30,7 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = userRepo.create({ email, password: hashedPassword, role });
     await userRepo.save(newUser);
-    res.json({ msg: " User Register Succesfully" });
+    res.status(201).json({ msg: " User Register Succesfully" });
     logger.info(`Register Sucess: ${email}`);
   } catch (err: any) {
     logger.error(`register error ${req.body.email}:${err.message}`);
@@ -61,7 +61,7 @@ export const login = async (req: Request, res: Response) => {
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "1h",
     });
-    res.json({ token, role: user.role });
+    res.status(200).json({ token, role: user.role });
     logger.info(`login success: ${email}, role: ${user.role}`);
   } catch (err: any) {
     logger.error(`login error for  ${req.body.email}: ${err.message}`);
@@ -74,7 +74,7 @@ export const getUser = async (req: Request, res: Response) => {
     const users = await userRepo.find({
       select: ["id", "email", "role", "isActive"],
     });
-    res.json(users);
+    res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ message: "Error fetching users", error });
   }
@@ -172,7 +172,7 @@ export const updateuser: RequestHandler = async (req, res) => {
 
     await userRepo.save(user);
 
-    res.json({ message: "User update successful", user });
+    res.status(200).json({ message: "User update successful", user });
   } catch (error) {
     res.status(500).json({ message: "Error updating user", error });
   }
@@ -205,7 +205,7 @@ export const deleteUser: RequestHandler = async (req, res) => {
     }
 
     await userRepo.remove(user);
-    res.json({ message: "User Deleted Successfully" });
+    res.status(200).json({ message: "User Deleted Successfully" });
   } catch (error) {
     res.status(500).json({ message: "Error Deleting User", error });
   }
