@@ -18,7 +18,7 @@ const userRepo = AppDataSource.getRepository(User);
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, role } = req.body;
+    const { name,email, password, role } = req.body;
 
     logger.info(`register attempt by ${email}`);
 
@@ -28,7 +28,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "User already exist" });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = userRepo.create({ email, password: hashedPassword, role });
+    const newUser = userRepo.create({name, email, password: hashedPassword, role });
     await userRepo.save(newUser);
     res.status(201).json({ msg: " User Register Succesfully" });
     logger.info(`Register Sucess: ${email}`);
@@ -72,7 +72,7 @@ export const login = async (req: Request, res: Response) => {
 export const getUser = async (req: Request, res: Response) => {
   try {
     const users = await userRepo.find({
-      select: ["id", "email", "role", "isActive"],
+      select: ["id","name", "email", "role", "isActive"],
     });
     res.status(200).json(users);
   } catch (error) {
