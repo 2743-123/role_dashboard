@@ -135,3 +135,11 @@
 2025-10-05 09:10:28 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
 2025-10-05 09:10:61 [[32minfo[39m]: register attempt by parmarbricks@gmail.com
 2025-10-05 09:10:57 [[32minfo[39m]: Register Sucess: parmarbricks@gmail.com
+2025-10-05 09:10:18 [[32minfo[39m]: register attempt by sohelbricks@gmail.com
+2025-10-05 09:10:16 [[32minfo[39m]: Register Sucess: sohelbricks@gmail.com
+2025-10-05 11:10:11 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-05 11:10:24 [[31merror[39m]: login error for  asifandhi25@gmail.com: column User.name does not exist
+2025-10-05 11:10:42 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-05 11:10:42 [[31merror[39m]: login error for  asifandhi25@gmail.com: column User.name does not exist
+2025-10-05 11:10:92 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-05 11:10:56 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin

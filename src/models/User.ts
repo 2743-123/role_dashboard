@@ -10,7 +10,7 @@ export class User {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  @Column({ default: "Unknown" })
   name!:string;
 
   @Column({ unique: true })
