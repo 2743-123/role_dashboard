@@ -58,7 +58,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "Invalid Credintail" });
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
+    const token = jwt.sign({ id: user.id, role: user.role, user:user.name , email:user.email }, JWT_SECRET, {
       expiresIn: "1h",
     });
     res.status(200).json({ token, role: user.role });
