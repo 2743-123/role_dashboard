@@ -3,25 +3,26 @@ import cors from "cors";
 import "reflect-metadata";
 import { AppDataSource } from "./config/db";
 import authroutes from "./routes/auth";
+import userroutes from "./routes/user";
 import morgan from "morgan";
 import { logger } from "./config/logger";
-import dotenv from "dotenv"
+import dotenv from "dotenv";
 
 dotenv.config();
 
 const app = express();
-app.use(cors({
-  origin: "http://localhost:3000", // ya "*" for all
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(
+  cors({
+    origin: "http://localhost:3000", // ya "*" for all
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.use(express.json());
 
+const PORT = process.env.PORT || 5000;
 
-
-const PORT = process.env.PORT || 5000
-
-app.use("/api/auth", authroutes);
+app.use("/api/auth", authroutes, userroutes);
 
 app.use(
   morgan("dev", {

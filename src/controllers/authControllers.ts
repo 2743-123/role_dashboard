@@ -5,6 +5,7 @@ import { AppDataSource } from "../config/db";
 import { User } from "../models/User";
 import { logger } from "../config/logger";
 import { error } from "console";
+import { BlacklistToken } from "../models/BlackListToken";
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -18,7 +19,7 @@ const userRepo = AppDataSource.getRepository(User);
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { name,email, password, role } = req.body;
+    const { name, email, password, role } = req.body;
 
     logger.info(`register attempt by ${email}`);
 
@@ -28,7 +29,12 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "User already exist" });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = userRepo.create({name, email, password: hashedPassword, role });
+    const newUser = userRepo.create({
+      name,
+      email,
+      password: hashedPassword,
+      role,
+    });
     await userRepo.save(newUser);
     res.status(201).json({ msg: " User Register Succesfully" });
     logger.info(`Register Sucess: ${email}`);
@@ -42,7 +48,7 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    console.log("request body",req.body)
+    console.log("request body", req.body);
 
     logger.info(`Login attempt by: ${email}`);
 
@@ -58,9 +64,13 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "Invalid Credintail" });
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role, user:user.name , email:user.email }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { id: user.id, role: user.role, user: user.name, email: user.email },
+      JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
     res.status(200).json({ token, role: user.role });
     logger.info(`login success: ${email}, role: ${user.role}`);
   } catch (err: any) {
@@ -69,176 +79,17 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-export const getUser = async (req: Request, res: Response) => {
+export const logout = async (req: Request, res: Response) => {
   try {
-    const users = await userRepo.find({
-      select: ["id","name", "email", "role", "isActive"],
-    });
-    res.status(200).json(users);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching users", error });
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(400).json({ msg: "Token missing" });
+
+    const blacklistRepo = AppDataSource.getRepository(BlacklistToken);
+    await blacklistRepo.save({ token });
+
+    res.status(200).json({ msg: "Logout successful, token invalidated" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ msg: "Server error" });
   }
 };
-
-// export const updateuser = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
-//     const { email, password, role, isActive } = req.body;
-
-//     const user = await userRepo.findOneBy({ id: parseInt(id) });
-//     if (!user) return res.status(404).json({ message: "User Not Found" });
-//     if (password) user.password = await bcrypt.hash(password, 10);
-//     if (email) user.email = email;
-//     if (role) user.role = role;
-//     if (isActive) user.isActive = isActive;
-
-//     await userRepo.save(user);
-
-//     res.json({ message: "user update succesfull", user });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error updating user", error });
-//   }
-// };
-
-// export const updateuser = async (req: AuthenticatedRequest,res: Response) => {
-//   try {
-//     const { id } = req.params;
-//     const { email, password, role, isActive } = req.body;
-
-//     const user = await userRepo.findOneBy({ id: parseInt(id) });
-//     if (!user) return res.status(404).json({ message: "User Not Found" });
-
-//     // ---- Role-based restrictions ----
-//     if (req.user.role === "admin") {
-//       if (user.role !== "user") {
-//         return res.status(403).json({ message: "Admin can only update users" });
-//       }
-//       if (user.id === req.user.id) {
-//         return res.status(403).json({ message: "Admin cannot update themselves" });
-//       }
-//     } else if (req.user.role === "user") {
-//       return res.status(403).json({ message: "Users cannot update anyone" });
-//     }
-
-//     // ---- Update fields ----
-//     if (password) user.password = await bcrypt.hash(password, 10);
-//     if (email) user.email = email;
-//     if (role) user.role = role;
-//     if (typeof isActive === "boolean") user.isActive = isActive;
-
-//     await userRepo.save(user);
-
-//     res.json({ message: "User update successful", user });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error updating user", error });
-//   }
-// };
-
-declare module "express-serve-static-core" {
-  interface Request {
-    user?: {
-      id: number;
-      role: string;
-    };
-  }
-}
-export const updateuser: RequestHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { email, password, role, isActive } = req.body;
-
-    const user = await userRepo.findOneBy({ id: parseInt(id) });
-    if (!user) return res.status(404).json({ message: "User Not Found" });
-
-    // role-based restrictions
-    if (req.user?.role === "admin") {
-      if (user.role !== "user") {
-        return res.status(403).json({ message: "Admin can only update users" });
-      }
-      if (user.id === req.user.id) {
-        return res
-          .status(403)
-          .json({ message: "Admin cannot update themselves" });
-      }
-    } else if (req.user?.role === "user") {
-      return res.status(403).json({ message: "Users cannot update anyone" });
-    }
-
-    // update fields
-    if (password) user.password = await bcrypt.hash(password, 10);
-    if (email) user.email = email;
-    if (role) user.role = role;
-    if (typeof isActive === "boolean") user.isActive = isActive;
-
-    await userRepo.save(user);
-
-    res.status(200).json({ message: "User update successful", user });
-  } catch (error) {
-    res.status(500).json({ message: "Error updating user", error });
-  }
-};
-
-// export const deleteUser = async(req : Request, res:Response)=>{
-//       try{
-//         const {id} = req.params;
-//         const user = await userRepo.findOneBy({id: parseInt(id)});
-//         if(!user) return res.status(404).json({message: "User Not Found"});
-//         await userRepo.remove(user);
-//         res.json({message : "User Deleted Succesfully"});
-
-//       }catch(error){
-
-//         res.status(500).json({message: " Error Delating User", error})
-//       }
-// }
-export const deleteUser: RequestHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await userRepo.findOneBy({ id: parseInt(id) });
-    if (!user) return res.status(404).json({ message: "User Not Found" });
-
-    // ✅ Check if user is inactive
-    if (user.isActive) {
-      return res
-        .status(403)
-        .json({ message: "Active users cannot be deleted" });
-    }
-
-    await userRepo.remove(user);
-    res.status(200).json({ message: "User Deleted Successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Error Deleting User", error });
-  }
-};
-
-// export const deleteUser = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
-
-//     const targetUser = await userRepo.findOneBy({ id: parseInt(id) });
-//     if (!targetUser) return res.status(404).json({ message: "User not found" });
-
-//     // ---- Role-based restrictions ----
-//     if (req.user.role === "admin") {
-//       if (targetUser.role !== "user") {
-//         return res.status(403).json({ message: "Admin can only delete users" });
-//       }
-//       if (targetUser.id === req.user.id) {
-//         return res.status(403).json({ message: "Admin cannot delete themselves" });
-//       }
-//     } else if (req.user.role === "user") {
-//       return res.status(403).json({ message: "Users cannot delete anyone" });
-//     }
-
-//     // ---- Active check ----
-//     if (targetUser.isActive) {
-//       return res.status(400).json({ message: "User must be inactive before deletion" });
-//     }
-
-//     await userRepo.remove(targetUser);
-
-//     res.json({ message: "User deleted successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error deleting user", error });
-//   }
-// };

@@ -147,3 +147,17 @@
 2025-10-07 10:10:02 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
 2025-10-07 10:10:90 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
 2025-10-07 10:10:36 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-09 09:10:52 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-09 09:10:50 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-09 09:10:66 [[32minfo[39m]: [0mPOST /api/auth/logout [33m404[0m 3.031 ms - 155[0m
+2025-10-09 09:10:50 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-09 09:10:34 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-09 09:10:04 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 2.206 ms - 153[0m
+2025-10-09 09:10:41 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 0.566 ms - 153[0m
+2025-10-09 09:10:23 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 0.395 ms - 153[0m
+2025-10-09 09:10:90 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-09 09:10:73 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-09 09:10:67 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 0.576 ms - 153[0m
+2025-10-09 09:10:48 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 1.938 ms - 153[0m
+2025-10-09 10:10:67 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 1.079 ms - 153[0m
+2025-10-09 10:10:55 [[32minfo[39m]: [0mGET /api/auth/users [33m404[0m 0.650 ms - 153[0m

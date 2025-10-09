@@ -11,7 +11,7 @@ export class User {
   id!: number;
 
   @Column({ default: "Unknown" })
-  name!:string;
+  name!: string;
 
   @Column({ unique: true })
   email!: string;

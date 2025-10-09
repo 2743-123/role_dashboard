@@ -2,29 +2,42 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppDataSource } from "../config/db";
 import { User } from "../models/User";
+import { BlacklistToken } from "../models/BlackListToken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
 export interface AuthRequest extends Request {
   user?: any;
 }
-export const authMiddleWare = (
+
+export const authMiddleWare = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
-  const token = req.headers["authorization"]?.split(" ")[1];
-  if (!token)
-    return res.status(401).json({ msg: "No Token , Authorized denide" });
   try {
+    const token = req.headers["authorization"]?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ msg: "No Token, Authorization denied" });
+    }
+
+    // 🛑 Check if token is blacklisted
+    const blacklistRepo = AppDataSource.getRepository(BlacklistToken);
+    const blacklisted = await blacklistRepo.findOne({ where: { token } });
+    if (blacklisted) {
+      return res.status(401).json({ msg: "Token expired or invalid" });
+    }
+
+    // ✅ Verify token
     const decoded = jwt.verify(token, JWT_SECRET) as {
       id: number;
       role: string;
     };
     req.user = decoded;
+
     next();
   } catch (err) {
-    res.status(401).json({ msg: "Invalide Token" });
+    res.status(401).json({ msg: "Invalid Token" });
   }
 };
 
