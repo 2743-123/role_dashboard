@@ -65,13 +65,13 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, name: user.name, email: user.email },
+      { id: user.id,  name: user.name, role: user.role,  },
       JWT_SECRET,
       {
         expiresIn: "1h",
       }
     );
-    res.status(200).json({ token, role: user.role });
+    res.status(200).json({ token });
     logger.info(`login success: ${email}, role: ${user.role}`);
   } catch (err: any) {
     logger.error(`login error for  ${req.body.email}: ${err.message}`);
