@@ -55,17 +55,17 @@ export const login = async (req: Request, res: Response) => {
     const user = await userRepo.findOneBy({ email });
     if (!user) {
       logger.warn(`Login failed(user not found: ${email})`);
-      return res.status(400).json({ msg: "Invalid Credintial" });
+      return res.status(400).json({ msg: "Invalid User" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       logger.warn(`login failed (Wrong password): ${email}`);
-      return res.status(400).json({ msg: "Invalid Credintail" });
+      return res.status(400).json({ msg: "Invalid Password" });
     }
 
     const token = jwt.sign(
-      { id: user.id,  name: user.name, role: user.role,  },
+      { id: user.id, name: user.name, role: user.role },
       JWT_SECRET,
       {
         expiresIn: "1h",
