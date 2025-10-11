@@ -52,18 +52,18 @@ export const adminMiddleware = (
   next();
 };
 
-export const superAdminMiddleware = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  if (req.user?.role !== "superadmin") {
-    return res
-      .status(403)
-      .json({ message: "Access denied, Super Admins only" });
-  }
-  next();
-};
+// export const superAdminMiddleware = (
+//   req: AuthRequest,
+//   res: Response,
+//   next: NextFunction
+// ) => {
+//   if (req.user?.role !== "superadmin" && req.user?.role !== "admin") {
+//     return res
+//       .status(403)
+//       .json({ message: "Access denied, Super Admins only" });
+//   }
+//   next();
+// };
 
 export const roleCheckMiddleware = (
   req: AuthRequest,

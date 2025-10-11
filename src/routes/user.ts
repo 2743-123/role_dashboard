@@ -3,7 +3,7 @@ import {
   adminMiddleware,
   authMiddleWare,
   roleCheckUpdateDelete,
-  superAdminMiddleware,
+
 } from "../middlewares/authMiddleware";
 import { deleteUser, getUser, updateuser } from "../controllers/userController";
 
@@ -12,7 +12,6 @@ const router = Router();
 router.get(
   "/users",
   authMiddleWare,
-  superAdminMiddleware,
   adminMiddleware,
   getUser
 );
