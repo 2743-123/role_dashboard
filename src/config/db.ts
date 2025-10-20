@@ -3,6 +3,8 @@ import { DataSource } from "typeorm";
 import { User } from "../models/User";
 import * as dotenv from "dotenv";
 import { BlacklistToken } from "../models/BlackListToken";
+import { MaterialAccount } from "../models/materialaccount";
+import { Token } from "../models/Token";
 dotenv.config();
 
 export const AppDataSource = new DataSource({
@@ -16,6 +18,6 @@ export const AppDataSource = new DataSource({
   synchronize: true,
   ssl: { rejectUnauthorized: false },
   logging: true,
-  entities: [User, BlacklistToken],
+  entities: [User, BlacklistToken,MaterialAccount,Token],
 });
 console.log("URL", process.env.DATABASE_URL);

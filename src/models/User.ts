@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  OneToMany,
 } from "typeorm";
+import { MaterialAccount } from "./materialaccount";
+import { Token } from "./Token";
 
 @Entity()
 export class User {
@@ -27,4 +30,14 @@ export class User {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @OneToMany(() => MaterialAccount, (account) => account.user)
+  accounts!: MaterialAccount[];
+
+  @OneToMany(() => Token, (token) => token.user)
+  tokens!: Token[];
+
+  @Column({ nullable: true })
+createdBy?: number; // stores superadmin id
+
 }

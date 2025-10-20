@@ -17,32 +17,68 @@ interface AuthenticatedRequest extends Request {
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 const userRepo = AppDataSource.getRepository(User);
 
+// export const register = async (req: Request, res: Response) => {
+//   try {
+//     const { name, email, password, role } = req.body;
+
+//     logger.info(`register attempt by ${email}`);
+
+//     const existingUser = await userRepo.findOneBy({ email });
+//     if (existingUser) {
+//       logger.warn(`existing user ${email}`);
+//       return res.status(400).json({ msg: "User already exist" });
+//     }
+//     const hashedPassword = await bcrypt.hash(password, 10);
+//     const newUser = userRepo.create({
+//       name,
+//       email,
+//       password: hashedPassword,
+//       role,
+//     });
+//     await userRepo.save(newUser);
+//     res.status(201).json({ user:newUser, msg: " User Register Succesfully" });
+//     logger.info(`Register Sucess: ${email}`);
+//   } catch (err: any) {
+//     logger.error(`register error ${req.body.email}:${err.message}`);
+//     res.status(500).json({ msg: "Erro Registering User", error: err });
+//   }
+// };
+
 export const register = async (req: Request, res: Response) => {
   try {
+    const currentUser = (req as any).user;
     const { name, email, password, role } = req.body;
 
-    logger.info(`register attempt by ${email}`);
-
-    const existingUser = await userRepo.findOneBy({ email });
-    if (existingUser) {
-      logger.warn(`existing user ${email}`);
-      return res.status(400).json({ msg: "User already exist" });
+    // Admin sirf "user" bana sakta hai
+    if (currentUser.role === "admin" && role !== "user") {
+      return res.status(403).json({ msg: "Admin can only create users" });
     }
+
+    // Normal user kisi ko create nahi kar sakta
+    if (currentUser.role === "user") {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
+    // Password hash
     const hashedPassword = await bcrypt.hash(password, 10);
+
     const newUser = userRepo.create({
       name,
       email,
       password: hashedPassword,
       role,
+      createdBy: currentUser.id, // track who created this user
+      isActive: true,
     });
+
     await userRepo.save(newUser);
-    res.status(201).json({ msg: " User Register Succesfully" });
-    logger.info(`Register Sucess: ${email}`);
-  } catch (err: any) {
-    logger.error(`register error ${req.body.email}:${err.message}`);
-    res.status(500).json({ msg: "Erro Registering User", error: err });
+    res.status(201).json({ msg: "User created successfully", user: newUser });
+  } catch (error) {
+    console.error("Error creating user:", error);
+    res.status(500).json({ msg: "Error creating user", error });
   }
 };
+
 
 export const login = async (req: Request, res: Response) => {
   try {

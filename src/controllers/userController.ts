@@ -4,16 +4,50 @@ import { User } from "../models/User";
 import bcrypt from "bcryptjs";
 
 const userRepo = AppDataSource.getRepository(User);
+// export const getUser = async (req: Request, res: Response) => {
+//   try {
+//     const users = await userRepo.find({
+//       select: ["id", "name", "email", "role", "isActive"],
+//     });
+//     res.status(200).json(users);
+//   } catch (error) {
+//     res.status(500).json({ msg: "Error fetching users", error });
+//   }
+// };
+
 export const getUser = async (req: Request, res: Response) => {
   try {
-    const users = await userRepo.find({
-      select: ["id", "name", "email", "role", "isActive"],
-    });
+    const currentUser = (req as any).user; // logged-in user info from JWT
+    let users;
+
+    if (currentUser.role === "superadmin") {
+      // SuperAdmin => sab dekh sakta hai
+      users = await userRepo.find({
+        select: ["id", "name", "email", "role", "isActive", "createdBy"],
+        order: { id: "DESC" },
+      });
+    } else if (currentUser.role === "admin") {
+      // Admin => sirf apne banaye hue users dekh sakta hai
+      users = await userRepo.find({
+        where: { createdBy: currentUser.id, role: "user" },
+        select: ["id", "name", "email", "role", "isActive", "createdBy"],
+        order: { id: "DESC" },
+      });
+    } else {
+      // Normal User => sirf apna data dekh sakta hai
+      users = await userRepo.findOne({
+        where: { id: currentUser.id },
+        select: ["id", "name", "email", "role", "isActive", "createdBy"],
+      });
+    }
+
     res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching users", error });
+    console.error("Error fetching users:", error);
+    res.status(500).json({ msg: "Error fetching users", error });
   }
 };
+
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -26,7 +60,7 @@ declare module "express-serve-static-core" {
 export const updateuser: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, password, role, isActive } = req.body;
+    const { name,email, password, role, isActive } = req.body;
 
     const user = await userRepo.findOneBy({ id: parseInt(id) });
     if (!user) return res.status(404).json({ message: "User Not Found" });
@@ -46,6 +80,7 @@ export const updateuser: RequestHandler = async (req, res) => {
     }
 
     // update fields
+    if (name) user.name = name
     if (password) user.password = await bcrypt.hash(password, 10);
     if (email) user.email = email;
     if (role) user.role = role;
