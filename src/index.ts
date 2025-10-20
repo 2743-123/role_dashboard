@@ -14,30 +14,13 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://roll-frontend-one.vercel.app",
-];
-
-// CORS middleware (handles normal + preflight)
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // allow curl/postman or non-browser requests
-      if (allowedOrigins.indexOf(origin) === -1) {
-        return callback(
-          new Error(
-            "The CORS policy for this site does not allow access from the specified Origin."
-          ),
-          false
-        );
-      }
-      return callback(null, true);
-    },
+    origin: ["https://roll-frontend-one.vercel.app"], // ✅ only your frontend
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
-
 // parse JSON
 app.use(express.json());
 
