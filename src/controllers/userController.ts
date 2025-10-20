@@ -4,16 +4,6 @@ import { User } from "../models/User";
 import bcrypt from "bcryptjs";
 
 const userRepo = AppDataSource.getRepository(User);
-// export const getUser = async (req: Request, res: Response) => {
-//   try {
-//     const users = await userRepo.find({
-//       select: ["id", "name", "email", "role", "isActive"],
-//     });
-//     res.status(200).json(users);
-//   } catch (error) {
-//     res.status(500).json({ msg: "Error fetching users", error });
-//   }
-// };
 
 export const getUser = async (req: Request, res: Response) => {
   try {
@@ -48,7 +38,6 @@ export const getUser = async (req: Request, res: Response) => {
   }
 };
 
-
 declare module "express-serve-static-core" {
   interface Request {
     user?: {
@@ -60,7 +49,7 @@ declare module "express-serve-static-core" {
 export const updateuser: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name,email, password, role, isActive } = req.body;
+    const { name, email, password, role, isActive } = req.body;
 
     const user = await userRepo.findOneBy({ id: parseInt(id) });
     if (!user) return res.status(404).json({ message: "User Not Found" });
@@ -80,7 +69,7 @@ export const updateuser: RequestHandler = async (req, res) => {
     }
 
     // update fields
-    if (name) user.name = name
+    if (name) user.name = name;
     if (password) user.password = await bcrypt.hash(password, 10);
     if (email) user.email = email;
     if (role) user.role = role;

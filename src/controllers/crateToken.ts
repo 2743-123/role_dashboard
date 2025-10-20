@@ -5,7 +5,6 @@ import { MaterialAccount } from "../models/materialaccount";
 import { User } from "../models/User";
 import { Token } from "../models/Token";
 
-
 const tokenRepo = AppDataSource.getRepository(Token);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 const userRepo = AppDataSource.getRepository(User);
@@ -231,9 +230,6 @@ export const updateToken = async (req: Request, res: Response) => {
   }
 };
 
-
-
-
 // 🔵 3. Confirm Token (final submit)
 export const confirmToken = async (req: Request, res: Response) => {
   try {
@@ -249,9 +245,9 @@ export const confirmToken = async (req: Request, res: Response) => {
 
     // 2️⃣ Role-based check
     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
-      return res
-        .status(403)
-        .json({ msg: "❌ Access Denied: You can confirm only your own tokens" });
+      return res.status(403).json({
+        msg: "❌ Access Denied: You can confirm only your own tokens",
+      });
     }
 
     // 3️⃣ Basic calculation
@@ -289,9 +285,7 @@ export const confirmToken = async (req: Request, res: Response) => {
     // 6️⃣ Optional: Transaction record (credit/debit)
     const transactionMsg =
       carryForward > 0
-        ? `💸 Remaining balance: ₹${carryForward.toFixed(
-            2
-          )} (to be paid later)`
+        ? `💸 Remaining balance: ₹${carryForward.toFixed(2)} (to be paid later)`
         : carryForward < 0
         ? `💰 Extra paid: ₹${Math.abs(carryForward).toFixed(2)} (credit)`
         : `✅ Fully paid`;
@@ -318,32 +312,6 @@ export const confirmToken = async (req: Request, res: Response) => {
     return res.status(500).json({ msg: "❌ Server Error" });
   }
 };
-
-// 🔹 4. Get Token List
-// export const getAllTokens = async (req: Request, res: Response) => {
-//   try {
-//     const currentUser = req.user!;
-
-//     let whereCondition = {};
-
-//     // 🧩 If normal user → only his tokens
-//     if (currentUser.role === "user") {
-//       whereCondition = { user: { id: currentUser.id } };
-//     }
-
-//     // 🧩 Fetch tokens with relation
-//     const tokens = await tokenRepo.find({
-//       where: whereCondition,
-//       relations: ["user"],
-//       order: { id: "DESC" },
-//     });
-
-//     res.json(tokens);
-//   } catch (err) {
-//     console.error("Error fetching tokens:", err);
-//     res.status(500).json({ msg: "Server error" });
-//   }
-// };
 
 export const getAllTokens = async (req: Request, res: Response) => {
   try {

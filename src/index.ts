@@ -5,11 +5,10 @@ import { AppDataSource } from "./config/db";
 import authroutes from "./routes/auth";
 import userroutes from "./routes/user";
 import addBalance from "./routes/addBalance";
-import token from "./routes/Token"
+import token from "./routes/Token";
 import morgan from "morgan";
 import { logger } from "./config/logger";
 import dotenv from "dotenv";
-
 
 dotenv.config();
 
@@ -25,7 +24,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 
-app.use("/api/auth", authroutes, userroutes,addBalance,token);
+app.use("/api/auth", authroutes, userroutes, addBalance, token);
 
 app.use(
   morgan("dev", {
