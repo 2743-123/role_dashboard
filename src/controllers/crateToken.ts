@@ -148,14 +148,16 @@ export const createToken = async (req: Request, res: Response) => {
 export const updateToken = async (req: Request, res: Response) => {
   try {
     const { tokenId, userId, weight, commission, paidAmount } = req.body;
-    const currentUser = req.user!; // 🔹 Login user (superadmin/admin/user)
+    const currentUser = (req as any).user; // 🔹 Current logged-in user
 
     // 1️⃣ Token find karo
     const token = await tokenRepo.findOne({
       where: { id: tokenId },
       relations: ["user"],
     });
-    if (!token) return res.status(404).json({ msg: "❌ Token not found" });
+
+    if (!token)
+      return res.status(404).json({ msg: "❌ Token not found" });
 
     // 2️⃣ Role-based access control
     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
@@ -188,21 +190,36 @@ export const updateToken = async (req: Request, res: Response) => {
         .json({ msg: "❌ Material account not found for this user" });
     }
 
-    // 🧮 5️⃣ Balance check before update
-    if (Number(weight) > Number(account.remainingTons)) {
+    // 5️⃣ Old weight difference logic
+    const oldWeight = token.weight || 0; // previous weight
+    const newWeight = Number(weight);
+    const diff = newWeight - oldWeight; // +ve = extra used, -ve = less used
+
+    // 6️⃣ Check if user has enough balance for extra weight
+    if (diff > 0 && diff > Number(account.remainingTons)) {
       return res.status(400).json({
-        msg: `❌ Insufficient balance. Available: ${account.remainingTons} tons, Requested: ${weight} tons`,
+        msg: `❌ Insufficient balance. Available: ${account.remainingTons} tons, Requested extra: ${diff} tons`,
       });
     }
 
-    // 6️⃣ Calculation
+    // 7️⃣ Update material account correctly
+    account.usedTons = Number(account.usedTons) + diff;
+    account.remainingTons = Number(account.remainingTons) - diff;
+
+    // Safety checks
+    if (account.usedTons < 0) account.usedTons = 0;
+    if (account.remainingTons < 0) account.remainingTons = 0;
+
+    await accountRepo.save(account);
+
+    // 8️⃣ Token calculation
     const ratePerTon = 180;
     const totalAmount = Number(weight) * ratePerTon + Number(commission);
     const carryForward = totalAmount - Number(paidAmount);
 
-    // 7️⃣ Update token
+    // 9️⃣ Update token info
     token.user = targetUser;
-    token.weight = Number(weight);
+    token.weight = newWeight;
     token.commission = Number(commission);
     token.ratePerTon = ratePerTon;
     token.totalAmount = totalAmount;
@@ -212,21 +229,22 @@ export const updateToken = async (req: Request, res: Response) => {
 
     await tokenRepo.save(token);
 
-    // 8️⃣ Update material account
-    account.usedTons = Number(account.usedTons) + Number(weight);
-    account.remainingTons = Number(account.remainingTons) - Number(weight);
-    if (account.remainingTons < 0) account.remainingTons = 0;
-
-    await accountRepo.save(account);
-
-    // ✅ Done
+    // ✅ Final Response
     return res.json({
-      msg: "✅ Token updated successfully",
-      data: token,
+      msg: "✅ Token updated successfully (Balance adjusted correctly)",
+      data: {
+        token,
+        updatedAccount: {
+          materialType: account.materialType,
+          totalTons: account.totalTons,
+          usedTons: account.usedTons,
+          remainingTons: account.remainingTons,
+        },
+      },
     });
   } catch (err) {
-    console.error("Error in updateToken:", err);
-    res.status(500).json({ msg: "❌ Server error" });
+    console.error("❌ Error in updateToken:", err);
+    return res.status(500).json({ msg: "❌ Server error", error: err });
   }
 };
 
