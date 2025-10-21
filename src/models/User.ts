@@ -7,6 +7,7 @@ import {
 } from "typeorm";
 import { MaterialAccount } from "./materialaccount";
 import { Token } from "./Token";
+import { Transaction } from "./Transaction";
 
 @Entity()
 export class User {
@@ -36,6 +37,9 @@ export class User {
 
   @OneToMany(() => Token, (token) => token.user)
   tokens!: Token[];
+
+   @OneToMany(() => Transaction, (transection) => transection.user)
+  transactions!: Transaction[];
 
   @Column({ nullable: true })
 createdBy?: number; // stores superadmin id
