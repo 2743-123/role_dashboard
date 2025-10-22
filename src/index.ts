@@ -5,6 +5,7 @@ import { AppDataSource } from "./config/db";
 import authroutes from "./routes/auth";
 import userroutes from "./routes/user";
 import addBalance from "./routes/addBalance";
+import BedashMessage from "./routes/bedashRoutes";
 import token from "./routes/Token";
 import morgan from "morgan";
 import { logger } from "./config/logger";
@@ -31,6 +32,7 @@ app.use("/api/auth", authroutes);
 app.use("/api/users", userroutes);
 app.use("/api/balance", addBalance);
 app.use("/api/token", token);
+app.use("/api/message", BedashMessage);
 
 // Logging
 app.use(

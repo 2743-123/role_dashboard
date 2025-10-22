@@ -8,6 +8,7 @@ import {
 import { MaterialAccount } from "./materialaccount";
 import { Token } from "./Token";
 import { Transaction } from "./Transaction";
+import { BedashMessage } from "./bedashMessage";
 
 @Entity()
 export class User {
@@ -40,6 +41,11 @@ export class User {
 
    @OneToMany(() => Transaction, (transection) => transection.user)
   transactions!: Transaction[];
+
+ @OneToMany(() => BedashMessage, (msg) => msg.user)
+  bedashMessages!: BedashMessage[];
+  
+  
 
   @Column({ nullable: true })
 createdBy?: number; // stores superadmin id

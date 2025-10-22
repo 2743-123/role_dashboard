@@ -6,6 +6,7 @@ import { BlacklistToken } from "../models/BlackListToken";
 import { MaterialAccount } from "../models/materialaccount";
 import { Token } from "../models/Token";
 import { Transaction } from "../models/Transaction";
+import { BedashMessage } from "../models/bedashMessage";
 dotenv.config();
 
 export const AppDataSource = new DataSource({
@@ -19,6 +20,6 @@ export const AppDataSource = new DataSource({
   synchronize: true,
   ssl: { rejectUnauthorized: false },
   logging: true,
-  entities: [User, BlacklistToken,MaterialAccount,Token,Transaction],
+  entities: [User, BlacklistToken,MaterialAccount,Token,Transaction,BedashMessage],
 });
 console.log("URL", process.env.DATABASE_URL);

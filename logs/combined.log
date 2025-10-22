@@ -765,3 +765,41 @@
 2025-10-21 17:10:20 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
 2025-10-21 20:10:33 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
 2025-10-21 20:10:01 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-21 21:10:01 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-21 21:10:52 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 10:10:19 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 10:10:36 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 10:10:93 [[32minfo[39m]: [0mGET /api/message/create [33m404[0m 5.981 ms - 157[0m
+2025-10-22 10:10:84 [[32minfo[39m]: [0mPOST /api/message/create [33m404[0m 0.466 ms - 158[0m
+2025-10-22 10:10:93 [[32minfo[39m]: [0mPOST /api/message/add [33m404[0m 0.816 ms - 155[0m
+2025-10-22 10:10:48 [[32minfo[39m]: [0mPOST /api/message/add [33m404[0m 0.372 ms - 155[0m
+2025-10-22 11:10:93 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 11:10:37 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 11:10:10 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 11:10:60 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 11:10:45 [[32minfo[39m]: [0mPOST /api/message/all [33m404[0m 2.408 ms - 155[0m
+2025-10-22 12:10:57 [[32minfo[39m]: [0mGET /api/message/congirm/61 [33m404[0m 2.745 ms - 161[0m
+2025-10-22 12:10:44 [[32minfo[39m]: [0mGET /api/message/confirm/61 [33m404[0m 0.664 ms - 161[0m
+2025-10-22 12:10:23 [[32minfo[39m]: [0mPUT /api/message/confirm/61 [33m404[0m 0.435 ms - 161[0m
+2025-10-22 12:10:26 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 12:10:71 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 12:10:38 [[32minfo[39m]: [0mGET /api/message/complate/5 [33m404[0m 1.919 ms - 161[0m
+2025-10-22 12:10:27 [[32minfo[39m]: [0mPUT /api/message/complate/5 [33m404[0m 0.331 ms - 161[0m
+2025-10-22 12:10:51 [[32minfo[39m]: [0mPUT /api/message/complate/5 [33m404[0m 0.331 ms - 161[0m
+2025-10-22 13:10:50 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 13:10:100 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 13:10:44 [[32minfo[39m]: [0mGET /api/bedash/all [33m404[0m 3.552 ms - 153[0m
+2025-10-22 13:10:44 [[32minfo[39m]: [0mGET /api/bedash/all [33m404[0m 0.471 ms - 153[0m
+2025-10-22 13:10:41 [[32minfo[39m]: [0mGET /api/bedash/all [33m404[0m 0.831 ms - 153[0m
+2025-10-22 13:10:48 [[32minfo[39m]: [0mGET /api/bedash/all [33m404[0m 0.892 ms - 153[0m
+2025-10-22 13:10:13 [[32minfo[39m]: [0mPUT /api/message/confirm/61 [33m404[0m 0.477 ms - 161[0m
+2025-10-22 13:10:26 [[32minfo[39m]: [0mGET /api/message/confirm/1 [33m404[0m 0.670 ms - 160[0m
+2025-10-22 13:10:24 [[32minfo[39m]: [0mPUT /api/message/confirm/1 [33m404[0m 0.316 ms - 160[0m
+2025-10-22 13:10:52 [[32minfo[39m]: [0mPUT /api/message/complate/61 [33m404[0m 0.292 ms - 162[0m
+2025-10-22 13:10:63 [[32minfo[39m]: [0mPUT /api/message/confirm/6 [33m404[0m 0.425 ms - 160[0m
+2025-10-22 13:10:52 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 13:10:02 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 14:10:09 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 14:10:50 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
+2025-10-22 20:10:20 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-22 20:10:63 [[32minfo[39m]: login success: asifandhi25@gmail.com, role: superadmin
