@@ -2,8 +2,14 @@ import { Request, RequestHandler, Response } from "express";
 import { AppDataSource } from "../config/db";
 import { User } from "../models/User";
 import bcrypt from "bcryptjs";
+import { MaterialAccount } from "../models/materialaccount";
+import { Transaction } from "../models/Transaction";
+import { BedashMessage } from "../models/bedashMessage";
 
 const userRepo = AppDataSource.getRepository(User);
+const accountRepo = AppDataSource.getRepository(MaterialAccount);
+const transactionRepo = AppDataSource.getRepository(Transaction);
+const bedashRepo = AppDataSource.getRepository(BedashMessage);
 
 export const getUser = async (req: Request, res: Response) => {
   try {
@@ -83,22 +89,70 @@ export const updateuser: RequestHandler = async (req, res) => {
   }
 };
 
+// export const deleteUser: RequestHandler = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const user = await userRepo.findOneBy({ id: parseInt(id) });
+//     if (!user) return res.status(404).json({ message: "User Not Found" });
+
+//     // ✅ Check if user is inactive
+//     if (user.isActive) {
+//       return res
+//         .status(403)
+//         .json({ message: "Active users cannot be deleted" });
+//     }
+
+//     await userRepo.remove(user);
+//     res.status(200).json({ message: "User Deleted Successfully" });
+//   } catch (error) {
+//     res.status(500).json({ message: "Error Deleting User", error });
+//   }
+// };
 export const deleteUser: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await userRepo.findOneBy({ id: parseInt(id) });
-    if (!user) return res.status(404).json({ message: "User Not Found" });
+    const user = await userRepo.findOne({
+      where: { id: parseInt(id) },
+      relations: ["accounts", "transactions", "bedashMessages"],
+    });
 
-    // ✅ Check if user is inactive
-    if (user.isActive) {
-      return res
-        .status(403)
-        .json({ message: "Active users cannot be deleted" });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // ✅ Only SuperAdmin can delete admin
+    const currentUser = (req as any).user;
+    if (user.role === "admin" && currentUser.role !== "superadmin") {
+      return res.status(403).json({ message: "Only SuperAdmin can delete admin" });
     }
 
+    // ✅ Step 1: If deleting an admin, also delete all users created by that admin
+    if (user.role === "admin") {
+      const adminUsers = await userRepo.find({
+        where: { createdBy: user.id },
+      });
+
+      for (const u of adminUsers) {
+        // Delete that user's material accounts
+        await accountRepo.delete({ user: { id: u.id } });
+        // Delete that user's transactions
+        await transactionRepo.delete({ user: { id: u.id } });
+        // Delete that user's bedash messages
+        await bedashRepo.delete({ user: { id: u.id } });
+        // Finally, delete user
+        await userRepo.delete({ id: u.id });
+      }
+    }
+
+    // ✅ Step 2: Delete current user's related data
+    await accountRepo.delete({ user: { id: user.id } });
+    await transactionRepo.delete({ user: { id: user.id } });
+    await bedashRepo.delete({ user: { id: user.id } });
+
+    // ✅ Step 3: Delete user itself
     await userRepo.remove(user);
-    res.status(200).json({ message: "User Deleted Successfully" });
+
+    res.status(200).json({ message: "User and related data deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Error Deleting User", error });
+    console.error("Error deleting user:", error);
+    res.status(500).json({ message: "Error deleting user", error });
   }
 };

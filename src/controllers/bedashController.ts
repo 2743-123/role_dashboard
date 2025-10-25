@@ -4,6 +4,7 @@ import { AppDataSource } from "../config/db";
 import { User } from "../models/User";
 import { MaterialAccount } from "../models/materialaccount";
 import { BedashMessage } from "../models/bedashMessage";
+import { Equal } from "typeorm";
 
 const bedashRepo = AppDataSource.getRepository(BedashMessage);
 const userRepo = AppDataSource.getRepository(User);
@@ -46,22 +47,74 @@ export const createBedash = async (req: Request, res: Response) => {
 };
 
 // ✅ GET ALL BEDASH LIST
+// export const getBedashList = async (req: Request, res: Response) => {
+//   try {
+//     const currentUser = (req as any).user;
+//     let bedashList;
+
+//     // SuperAdmin/Admin -> all users, normal user -> only own
+//     if (["admin", "superadmin"].includes(currentUser.role)) {
+//       bedashList = await bedashRepo.find({ relations: ["user"] });
+//     } else {
+//       bedashList = await bedashRepo.find({
+//         where: { user: { id: currentUser.id } },
+//         relations: ["user"],
+//       });
+//     }
+
+//     // Calculate remaining tons dynamically from MaterialAccount
+//     const result = await Promise.all(
+//       bedashList.map(async (b) => {
+//         const account = await accountRepo.findOne({
+//           where: {
+//             user: { id: b.user.id },
+//             materialType: b.materialType as "flyash" | "bedash",
+//           },
+//         });
+
+//         return {
+//           id: b.id,
+//           userName: b.user.name,
+//           materialType: b.materialType,
+//           remainingTons: account ? account.remainingTons : 0,
+//           status: b.status,
+//           customDate: b.customDate,
+//           targetDate: b.targetDate,
+//           createdAt: b.createdAt,
+//         };
+//       })
+//     );
+
+//     res.json(result);
+//   } catch (err) {
+//     console.error("Error fetching bedash list:", err);
+//     res.status(500).json({ msg: "❌ Server error" });
+//   }
+// };
 export const getBedashList = async (req: Request, res: Response) => {
   try {
     const currentUser = (req as any).user;
     let bedashList;
 
-    // SuperAdmin/Admin -> all users, normal user -> only own
-    if (["admin", "superadmin"].includes(currentUser.role)) {
-      bedashList = await bedashRepo.find({ relations: ["user"] });
-    } else {
+    if (currentUser.role === "superadmin") {
+      bedashList = await bedashRepo.find({ relations: ["user", "createdBy"] });
+    } 
+    else if (currentUser.role === "admin") {
       bedashList = await bedashRepo.find({
-        where: { user: { id: currentUser.id } },
-        relations: ["user"],
+        where: [
+          { createdBy: Equal(currentUser.id) },
+          { user: { createdBy: Equal(currentUser.id) } },
+        ],
+        relations: ["user", "createdBy"],
+      });
+    } 
+    else {
+      bedashList = await bedashRepo.find({
+        where: { user: { id: Equal(currentUser.id) } },
+        relations: ["user", "createdBy"],
       });
     }
 
-    // Calculate remaining tons dynamically from MaterialAccount
     const result = await Promise.all(
       bedashList.map(async (b) => {
         const account = await accountRepo.findOne({
@@ -90,6 +143,7 @@ export const getBedashList = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "❌ Server error" });
   }
 };
+
 
 // ✅ CONFIRM BEDASH (mark completed)
 export const confirmBedash = async (req: Request, res: Response) => {

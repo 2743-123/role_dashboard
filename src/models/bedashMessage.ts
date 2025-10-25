@@ -7,7 +7,6 @@ import {
 } from "typeorm";
 import { User } from "./User";
 
-
 @Entity()
 export class BedashMessage {
   @PrimaryGeneratedColumn()
@@ -22,8 +21,8 @@ export class BedashMessage {
   @Column({ type: "varchar", length: 20, default: "bedash" })
   materialType!: string;
 
- @Column({ type: "date", nullable: true })
-customDate!: Date | null;
+  @Column({ type: "date", nullable: true })
+  customDate!: Date | null;
 
   @Column({ type: "date", nullable: true })
   targetDate!: Date | null; // completion target
@@ -33,4 +32,7 @@ customDate!: Date | null;
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @ManyToOne(() => User, (user) => user.createdBedash, { eager: false })
+  createdBy!: User;
 }

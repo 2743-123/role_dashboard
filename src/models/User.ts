@@ -39,15 +39,15 @@ export class User {
   @OneToMany(() => Token, (token) => token.user)
   tokens!: Token[];
 
-   @OneToMany(() => Transaction, (transection) => transection.user)
+  @OneToMany(() => Transaction, (transection) => transection.user)
   transactions!: Transaction[];
 
- @OneToMany(() => BedashMessage, (msg) => msg.user)
+  @OneToMany(() => BedashMessage, (msg) => msg.user)
   bedashMessages!: BedashMessage[];
-  
-  
 
   @Column({ nullable: true })
-createdBy?: number; // stores superadmin id
+  createdBy?: number; // stores superadmin id
 
+  @OneToMany(() => BedashMessage, (bedash) => bedash.createdBy)
+  createdBedash!: BedashMessage[];
 }
