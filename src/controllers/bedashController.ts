@@ -16,7 +16,7 @@ export const createBedash = async (req: Request, res: Response) => {
     const { userId, materialType, customDate, targetDate ,amount} = req.body;
     const currentUser = (req as any).user;
 
-    if (!["admin", "superadmin"].includes(currentUser.role)) {
+    if (!["admin", "superadmin" ,"user"].includes(currentUser.role)) {
       return res
         .status(403)
         .json({ msg: "❌ Only Admin/SuperAdmin can create" });
