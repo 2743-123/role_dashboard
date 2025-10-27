@@ -96,25 +96,17 @@ export const getBedashList = async (req: Request, res: Response) => {
     const currentUser = (req as any).user;
     let bedashList;
 
-    if (currentUser.role === "superadmin") {
-      bedashList = await bedashRepo.find({ relations: ["user", "createdBy"] });
-    } 
-    else if (currentUser.role === "admin") {
+    // SuperAdmin/Admin -> all users, normal user -> only own
+    if (["admin", "superadmin"].includes(currentUser.role)) {
+      bedashList = await bedashRepo.find({ relations: ["user"] });
+    } else {
       bedashList = await bedashRepo.find({
-        where: [
-          { createdBy: Equal(currentUser.id) },
-          { user: { createdBy: Equal(currentUser.id) } },
-        ],
-        relations: ["user", "createdBy"],
-      });
-    } 
-    else {
-      bedashList = await bedashRepo.find({
-        where: { user: { id: Equal(currentUser.id) } },
-        relations: ["user", "createdBy"],
+        where: { user: { id: currentUser.id } },
+        relations: ["user"],
       });
     }
 
+    // Calculate remaining tons dynamically from MaterialAccount
     const result = await Promise.all(
       bedashList.map(async (b) => {
         const account = await accountRepo.findOne({

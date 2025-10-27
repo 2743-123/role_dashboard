@@ -883,3 +883,7 @@
 2025-10-25 16:10:35 [[32minfo[39m]: Login success: admin2@gmail.com, role: user
 2025-10-25 16:10:93 [[32minfo[39m]: Login attempt by: admin@gmail.com
 2025-10-25 16:10:35 [[32minfo[39m]: Login success: admin@gmail.com, role: admin
+2025-10-27 20:10:96 [[32minfo[39m]: Login attempt by: b@gmail.com
+2025-10-27 20:10:76 [[33mwarn[39m]: Login blocked (Creator inactive): b@gmail.com
+2025-10-27 20:10:07 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2025-10-27 20:10:19 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
