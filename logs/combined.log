@@ -871,3 +871,7 @@
 2025-10-27 18:10:45 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
 2025-10-27 19:10:32 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
 2025-10-27 19:10:43 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2025-10-27 19:10:02 [[32minfo[39m]: Login attempt by: a@gmail.com
+2025-10-27 19:10:10 [[33mwarn[39m]: Login blocked (Inactive user): a@gmail.com
+2025-10-27 19:10:77 [[32minfo[39m]: Login attempt by: b@gmail.com
+2025-10-27 19:10:45 [[33mwarn[39m]: Login blocked (Creator inactive): b@gmail.com
