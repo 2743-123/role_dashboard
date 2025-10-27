@@ -32,7 +32,4 @@ export class BedashMessage {
 
   @CreateDateColumn()
   createdAt!: Date;
-
-  @ManyToOne(() => User, (user) => user.createdBedash, { eager: false })
-  createdBy!: User;
 }
