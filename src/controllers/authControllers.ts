@@ -94,18 +94,31 @@ export const login = async (req: Request, res: Response) => {
     console.log("request body", req.body);
     logger.info(`Login attempt by: ${email}`);
 
-    const user = await userRepo.findOneBy({ email });
+    // ✅ Fetch user along with creator (admin)
+    const user = await userRepo.findOne({
+      where: { email },
+      relations: ["creator"], // <-- include creator/admin relation
+    });
+
     if (!user) {
       logger.warn(`Login failed (User not found: ${email})`);
       return res.status(400).json({ msg: "Invalid User" });
     }
 
-    // ✅ Check if user is active
+    // ✅ Check if user is inactive
     if (!user.isActive) {
       logger.warn(`Login blocked (Inactive user): ${email}`);
       return res
         .status(403)
         .json({ msg: "Your account is inactive. Please contact admin." });
+    }
+
+    // ✅ Check if user's creator (admin) is inactive
+    if (user.creator && !user.creator.isActive) {
+      logger.warn(`Login blocked (Creator inactive): ${email}`);
+      return res.status(403).json({
+        msg: "Your admin account is inactive. Please contact SuperAdmin.",
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
