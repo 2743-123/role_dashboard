@@ -4,6 +4,8 @@ import {
   Column,
   CreateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from "typeorm";
 import { MaterialAccount } from "./materialaccount";
 import { Token } from "./Token";
@@ -39,15 +41,22 @@ export class User {
   @OneToMany(() => Token, (token) => token.user)
   tokens!: Token[];
 
-   @OneToMany(() => Transaction, (transection) => transection.user)
+  @OneToMany(() => Transaction, (transection) => transection.user)
   transactions!: Transaction[];
 
- @OneToMany(() => BedashMessage, (msg) => msg.user)
+  @OneToMany(() => BedashMessage, (msg) => msg.user)
   bedashMessages!: BedashMessage[];
-  
-  
 
   @Column({ nullable: true })
-createdBy?: number; // stores superadmin id
+  createdBy?: number; // stores superadmin id
 
+  @ManyToOne(() => User, (user) => user.children, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "createdBy" })
+  creator?: User;
+
+  @OneToMany(() => User, (user) => user.creator)
+  children!: User[];
 }
