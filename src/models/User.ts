@@ -59,4 +59,8 @@ export class User {
 
   @OneToMany(() => User, (user) => user.creator)
   children!: User[];
+
+  @OneToMany(() => BedashMessage, (bedash) => bedash.createdBy)
+createdBedash!: BedashMessage[];
 }
+
