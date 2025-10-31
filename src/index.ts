@@ -17,7 +17,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://roll-frontend-one.vercel.app", "http://localhost:3000"], // ✅ only your frontend
+    origin: ["https://roll-frontend-one.vercel.app", "http://localhost:3001"], // ✅ only your frontend
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders:["Content-Type","Authorization"],
     credentials: true,
