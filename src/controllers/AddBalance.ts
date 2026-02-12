@@ -168,3 +168,106 @@ export const getBalance = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Server error", error });
   }
 };
+
+export const getAllUsersBalanceReport = async (req: Request, res: Response) => {
+  try {
+    const currentUser = req.user!;
+
+    // 1️⃣ Only admin / superadmin allowed
+    if (currentUser.role === "user") {
+      return res.status(403).json({ msg: "❌ Access denied" });
+    }
+
+    let users: User[] = [];
+
+    // 2️⃣ Superadmin → all users
+    if (currentUser.role === "superadmin") {
+      users = await userRepo.find({
+        where: { role: "user" },
+        order: { name: "ASC" },
+      });
+    }
+
+    // 3️⃣ Admin → only their created users
+    else if (currentUser.role === "admin") {
+      users = await userRepo.find({
+        where: {
+          role: "user",
+          createdBy: currentUser.id, // ✅ correct filter
+        },
+        order: { name: "ASC" },
+      });
+    }
+
+    const report = [];
+
+    // 4️⃣ Loop through users
+    for (const user of users) {
+      const flyashAccount = await accountRepo.findOne({
+        where: { user: { id: user.id }, materialType: "flyash" },
+      });
+
+      const bedashAccount = await accountRepo.findOne({
+        where: { user: { id: user.id }, materialType: "bedash" },
+      });
+
+      const transactions = await transactionRepo.find({
+        where: { user: { id: user.id } },
+        order: { createdAt: "DESC" },
+      });
+
+      report.push({
+        userId: user.id,
+        userName: user.name,
+
+        flyash: {
+          total: flyashAccount
+            ? Number(flyashAccount.totalTons).toFixed(3)
+            : "0.000",
+          used: flyashAccount
+            ? Number(flyashAccount.usedTons).toFixed(3)
+            : "0.000",
+          remaining: flyashAccount
+            ? Number(flyashAccount.remainingTons).toFixed(3)
+            : "0.000",
+        },
+
+        bedash: {
+          total: bedashAccount
+            ? Number(bedashAccount.totalTons).toFixed(3)
+            : "0.000",
+          used: bedashAccount
+            ? Number(bedashAccount.usedTons).toFixed(3)
+            : "0.000",
+          remaining: bedashAccount
+            ? Number(bedashAccount.remainingTons).toFixed(3)
+            : "0.000",
+        },
+
+        ratePerTon: 180,
+
+        transactions: transactions.map((tx) => ({
+          id: tx.id,
+          date: tx.createdAt,
+          flyashAmount: tx.flyashAmount,
+          bedashAmount: tx.bedashAmount,
+          totalAmount: tx.totalAmount,
+          flyashTons: Number(tx.flyashTons).toFixed(3),
+          bedashTons: Number(tx.bedashTons).toFixed(3),
+          paymentMode: tx.paymentMode,
+          referenceNumber: tx.referenceNumber,
+        })),
+      });
+    }
+
+    // 5️⃣ Response
+    return res.json({
+      msg: "✅ Admin balance report fetched",
+      totalUsers: report.length,
+      data: report,
+    });
+  } catch (error) {
+    console.error("Error in admin balance report:", error);
+    return res.status(500).json({ msg: "Server error", error });
+  }
+};

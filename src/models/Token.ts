@@ -38,6 +38,9 @@ export class Token {
   @CreateDateColumn()
   createdAt!: Date;
 
+  @Column({ type: "timestamp", nullable: true })
+  confirmedAt!: Date | null;
+
   @ManyToOne(() => User, (user) => user.tokens, {
   onDelete: "CASCADE", // 👈 this line is key
   onUpdate: "CASCADE", // optional but good practice
