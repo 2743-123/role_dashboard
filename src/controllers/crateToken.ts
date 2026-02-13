@@ -14,9 +14,45 @@ const userRepo = AppDataSource.getRepository(User);
 // 🟢 1. CREATE TOKEN
 //////////////////////////////////////////////////////////////
 
+// export const createToken = async (req: Request, res: Response) => {
+//   try {
+//     const { customerName, truckNumber, materialType, userId } = req.body;
+
+//     const user = await userRepo.findOne({ where: { id: userId } });
+//     if (!user) return res.status(404).json({ msg: "User not found" });
+
+//     const lastToken = await tokenRepo.findOne({
+//       where: { customerName },
+//       order: { id: "DESC" },
+//     });
+
+//     const prevCarry = lastToken ? Number(lastToken.carryForward || 0) : 0;
+
+//     /** only ADVANCE goes forward */
+//     const carryForward = prevCarry > 0 ? prevCarry : 0;
+
+//     const token = tokenRepo.create({
+//       customerName,
+//       truckNumber,
+//       materialType,
+//       user,
+//       status: "pending",
+//       carryForward,
+//       paidAmount: carryForward > 0 ? carryForward : 0,
+//     });
+
+//     await tokenRepo.save(token);
+
+//     return res.json({ msg: "✅ Token created", data: token });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ msg: "Server error" });
+//   }
+// };
+
 export const createToken = async (req: Request, res: Response) => {
   try {
-    const { customerName, truckNumber, materialType, userId } = req.body;
+    const { customerName, materialType, userId } = req.body; // ❌ truck removed
 
     const user = await userRepo.findOne({ where: { id: userId } });
     if (!user) return res.status(404).json({ msg: "User not found" });
@@ -28,17 +64,20 @@ export const createToken = async (req: Request, res: Response) => {
 
     const prevCarry = lastToken ? Number(lastToken.carryForward || 0) : 0;
 
-    /** only ADVANCE goes forward */
+    /** only ADVANCE forward */
     const carryForward = prevCarry > 0 ? prevCarry : 0;
 
     const token = tokenRepo.create({
       customerName,
-      truckNumber,
       materialType,
       user,
       status: "pending",
       carryForward,
       paidAmount: carryForward > 0 ? carryForward : 0,
+      truckNumber: undefined, // 🆕 truck later
+      weight: 0,
+      commission: 0,
+      totalAmount: 0,
     });
 
     await tokenRepo.save(token);
@@ -142,9 +181,97 @@ export const createToken = async (req: Request, res: Response) => {
 //     return res.status(500).json({ msg: "Server error" });
 //   }
 // };
+// export const updateToken = async (req: Request, res: Response) => {
+//   try {
+//     const { tokenId, userId, weight, commission } = req.body; // ❌ paidAmount removed
+//     const currentUser = (req as any).user;
+
+//     const token = await tokenRepo.findOne({
+//       where: { id: tokenId },
+//       relations: ["user"],
+//     });
+
+//     if (!token) return res.status(404).json({ msg: "Token not found" });
+
+//     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
+//       return res.status(403).json({ msg: "Access denied" });
+//     }
+
+//     let targetUser = token.user;
+
+//     if (["admin", "superadmin"].includes(currentUser.role)) {
+//       const newUser = await userRepo.findOne({ where: { id: userId } });
+//       if (!newUser) return res.status(404).json({ msg: "Target user not found" });
+//       targetUser = newUser;
+//     }
+
+//     /** material account */
+//     const account = await accountRepo.findOne({
+//       where: { user: { id: targetUser.id }, materialType: token.materialType },
+//     });
+
+//     if (!account) return res.status(400).json({ msg: "Material account not found" });
+
+//     /** weight diff */
+//     const oldWeight = token.weight || 0;
+//     const newWeight = Number(weight);
+//     const diff = newWeight - oldWeight;
+
+//     if (diff > 0 && diff > Number(account.remainingTons)) {
+//       return res.status(400).json({
+//         msg: `Insufficient balance. Available: ${account.remainingTons}`,
+//       });
+//     }
+
+//     account.usedTons += diff;
+//     account.remainingTons -= diff;
+//     await accountRepo.save(account);
+
+//     /** billing */
+//     const ratePerTon = 180;
+//     const totalAmount = newWeight * ratePerTon + Number(commission);
+
+//     /** previous token carry */
+//     const prevToken = await tokenRepo
+//       .createQueryBuilder("t")
+//       .where("t.customerName = :customerName", { customerName: token.customerName })
+//       .andWhere("t.id < :id", { id: token.id })
+//       .orderBy("t.id", "DESC")
+//       .getOne();
+
+//     const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
+
+//     /**
+//      ⭐ RUNNING DUE
+//      previousCarry − totalAmount
+//     */
+//     const carryForward = Number((prevCarry - totalAmount).toFixed(2));
+
+//     token.user = targetUser;
+//     token.weight = newWeight;
+//     token.commission = Number(commission);
+//     token.ratePerTon = ratePerTon;
+//     token.totalAmount = totalAmount;
+
+//     // ❌ DO NOT TOUCH paidAmount here
+
+//     token.carryForward = carryForward;
+//     token.status = carryForward === 0 ? "completed" : "updated";
+
+//     await tokenRepo.save(token);
+
+//     return res.json({
+//       msg: "✅ Token updated (payment untouched)",
+//       data: token,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ msg: "Server error" });
+//   }
+// };
 export const updateToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, userId, weight, commission } = req.body; // ❌ paidAmount removed
+    const { tokenId, userId, truckNumber, weight, commission } = req.body; // 🆕 truck added
     const currentUser = (req as any).user;
 
     const token = await tokenRepo.findOne({
@@ -162,7 +289,8 @@ export const updateToken = async (req: Request, res: Response) => {
 
     if (["admin", "superadmin"].includes(currentUser.role)) {
       const newUser = await userRepo.findOne({ where: { id: userId } });
-      if (!newUser) return res.status(404).json({ msg: "Target user not found" });
+      if (!newUser)
+        return res.status(404).json({ msg: "Target user not found" });
       targetUser = newUser;
     }
 
@@ -171,7 +299,8 @@ export const updateToken = async (req: Request, res: Response) => {
       where: { user: { id: targetUser.id }, materialType: token.materialType },
     });
 
-    if (!account) return res.status(400).json({ msg: "Material account not found" });
+    if (!account)
+      return res.status(400).json({ msg: "Material account not found" });
 
     /** weight diff */
     const oldWeight = token.weight || 0;
@@ -192,37 +321,35 @@ export const updateToken = async (req: Request, res: Response) => {
     const ratePerTon = 180;
     const totalAmount = newWeight * ratePerTon + Number(commission);
 
-    /** previous token carry */
+    /** previous carry */
     const prevToken = await tokenRepo
       .createQueryBuilder("t")
-      .where("t.customerName = :customerName", { customerName: token.customerName })
+      .where("t.customerName = :customerName", {
+        customerName: token.customerName,
+      })
       .andWhere("t.id < :id", { id: token.id })
       .orderBy("t.id", "DESC")
       .getOne();
 
     const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
 
-    /**
-     ⭐ RUNNING DUE
-     previousCarry − totalAmount
-    */
+    /** running due */
     const carryForward = Number((prevCarry - totalAmount).toFixed(2));
 
+    /** 🆕 update fields */
     token.user = targetUser;
+    token.truckNumber = truckNumber; // ⭐ added
     token.weight = newWeight;
     token.commission = Number(commission);
     token.ratePerTon = ratePerTon;
     token.totalAmount = totalAmount;
-
-    // ❌ DO NOT TOUCH paidAmount here
-
     token.carryForward = carryForward;
     token.status = carryForward === 0 ? "completed" : "updated";
 
     await tokenRepo.save(token);
 
     return res.json({
-      msg: "✅ Token updated (payment untouched)",
+      msg: "✅ Token updated with truck & billing",
       data: token,
     });
   } catch (err) {
@@ -230,7 +357,6 @@ export const updateToken = async (req: Request, res: Response) => {
     return res.status(500).json({ msg: "Server error" });
   }
 };
-
 
 //////////////////////////////////////////////////////////////
 // 🔵 3. CONFIRM PAYMENT — REAL LEDGER ENGINE
@@ -313,7 +439,6 @@ export const confirmToken = async (req: Request, res: Response) => {
   }
 };
 
-
 //////////////////////////////////////////////////////////////
 // 🟣 4. GET TOKENS BY USER
 //////////////////////////////////////////////////////////////
@@ -380,7 +505,7 @@ export const getAdminAllUserTokens = async (req: Request, res: Response) => {
 
     const getRemaining = (userId: number, material: string) => {
       const acc = accounts.find(
-        (a) => a.user.id === userId && a.materialType === material
+        (a) => a.user.id === userId && a.materialType === material,
       );
       return acc ? Number(acc.remainingTons).toFixed(3) : "0.000";
     };
@@ -404,6 +529,45 @@ export const getAdminAllUserTokens = async (req: Request, res: Response) => {
       msg: "✅ Admin token report fetched",
       totalTokens: table.length,
       data: table,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ msg: "Server error" });
+  }
+};
+
+//////////////////////////////////////////////////////////////
+// 🔻 6. DELETE TOKEN (ONLY PENDING)
+//////////////////////////////////////////////////////////////
+
+export const deleteToken = async (req: Request, res: Response) => {
+  try {
+    const { tokenId } = req.params;
+    const currentUser = req.user!;
+
+    const token = await tokenRepo.findOne({
+      where: { id: Number(tokenId) },
+      relations: ["user"],
+    });
+
+    if (!token) return res.status(404).json({ msg: "Token not found" });
+
+    /** 🔐 permission check */
+    if (currentUser.role === "user" && currentUser.id !== token.user.id) {
+      return res.status(403).json({ msg: "Access denied" });
+    }
+
+    /** 🚫 only pending token can be deleted */
+    if (token.status !== "pending") {
+      return res.status(400).json({
+        msg: "❌ Only pending tokens can be deleted",
+      });
+    }
+
+    await tokenRepo.remove(token);
+
+    return res.json({
+      msg: "🗑️ Pending token deleted successfully",
     });
   } catch (err) {
     console.error(err);

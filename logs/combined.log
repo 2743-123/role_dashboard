@@ -1008,3 +1008,21 @@
 2026-02-12 14:02:48 [[33mwarn[39m]: Login failed (User not found: demo@gmail.com)
 2026-02-12 14:02:44 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
 2026-02-12 14:02:21 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-02-13 15:02:78 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-02-13 15:02:72 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-02-13 15:02:94 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-02-13 15:02:34 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-02-13 15:02:86 [[32minfo[39m]: Login attempt by: asif@gmail.com
+2026-02-13 15:02:17 [[33mwarn[39m]: Login failed (Wrong password): asif@gmail.com
+2026-02-13 15:02:86 [[32minfo[39m]: Login attempt by: asif@gmail.com
+2026-02-13 15:02:18 [[32minfo[39m]: Login success: asif@gmail.com, role: admin
+2026-02-13 15:02:24 [[32minfo[39m]: [0mDELETE /api/token/64 [33m404[0m 7.137 ms - 154[0m
+2026-02-13 15:02:83 [[32minfo[39m]: [0mDELETE /api/token/64 [33m404[0m 1.000 ms - 154[0m
+2026-02-13 16:02:22 [[32minfo[39m]: Login attempt by: asif@gmail.com
+2026-02-13 16:02:63 [[33mwarn[39m]: Login failed (Wrong password): asif@gmail.com
+2026-02-13 16:02:39 [[32minfo[39m]: Login attempt by: asif@gmail.com
+2026-02-13 16:02:12 [[33mwarn[39m]: Login failed (Wrong password): asif@gmail.com
+2026-02-13 16:02:19 [[32minfo[39m]: Login attempt by: asif@gmail.com
+2026-02-13 16:02:97 [[33mwarn[39m]: Login failed (Wrong password): asif@gmail.com
+2026-02-13 16:02:62 [[32minfo[39m]: Login attempt by: asif@gmail.com
+2026-02-13 16:02:38 [[32minfo[39m]: Login success: asif@gmail.com, role: admin

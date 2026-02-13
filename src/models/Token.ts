@@ -1,4 +1,10 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from "typeorm";
 import { User } from "./User";
 @Entity()
 export class Token {
@@ -8,7 +14,7 @@ export class Token {
   @Column()
   customerName!: string;
 
-  @Column()
+  @Column({ nullable: true })
   truckNumber!: string;
 
   @Column()
@@ -42,9 +48,8 @@ export class Token {
   confirmedAt!: Date | null;
 
   @ManyToOne(() => User, (user) => user.tokens, {
-  onDelete: "CASCADE", // 👈 this line is key
-  onUpdate: "CASCADE", // optional but good practice
-})
-user!: User;
+    onDelete: "CASCADE", // 👈 this line is key
+    onUpdate: "CASCADE", // optional but good practice
+  })
+  user!: User;
 }
-
