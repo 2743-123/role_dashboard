@@ -351,10 +351,24 @@ export const deleteBalance = async (req: Request, res: Response) => {
       relations: ["user"],
     });
 
-    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+    if (!transaction)
+      return res.status(404).json({ msg: "Transaction not found" });
 
     if (currentUser.role === "user")
       return res.status(403).json({ msg: "❌ Access denied" });
+
+    /** 🔹 get latest transaction of this user */
+    const lastTransaction = await transactionRepo.findOne({
+      where: { user: { id: transaction.user.id } },
+      order: { id: "DESC" },
+    });
+
+    /** ❌ only last transaction can be deleted */
+    if (!lastTransaction || lastTransaction.id !== transaction.id) {
+      return res.status(400).json({
+        msg: "❌ Only latest balance entry can be deleted",
+      });
+    }
 
     const flyashAccount = await accountRepo.findOne({
       where: { user: { id: transaction.user.id }, materialType: "flyash" },
@@ -367,18 +381,20 @@ export const deleteBalance = async (req: Request, res: Response) => {
     if (!flyashAccount || !bedashAccount)
       return res.status(400).json({ msg: "Material account missing" });
 
-    /** safety check */
-    if (flyashAccount.remainingTons < transaction.flyashTons)
+    /** 🔹 check unused tons */
+    if (flyashAccount.remainingTons < transaction.flyashTons) {
       return res.status(400).json({
         msg: "❌ Flyash already used. Can't delete balance.",
       });
+    }
 
-    if (bedashAccount.remainingTons < transaction.bedashTons)
+    if (bedashAccount.remainingTons < transaction.bedashTons) {
       return res.status(400).json({
         msg: "❌ Bedash already used. Can't delete balance.",
       });
+    }
 
-    /** subtract tons */
+    /** 🔹 subtract tons */
     flyashAccount.totalTons -= transaction.flyashTons;
     flyashAccount.remainingTons -= transaction.flyashTons;
 
@@ -387,7 +403,7 @@ export const deleteBalance = async (req: Request, res: Response) => {
 
     await accountRepo.save([flyashAccount, bedashAccount]);
 
-    /** delete transaction */
+    /** 🔹 delete transaction */
     await transactionRepo.remove(transaction);
 
     return res.json({ msg: "🗑️ Balance deleted successfully" });
@@ -396,3 +412,4 @@ export const deleteBalance = async (req: Request, res: Response) => {
     return res.status(500).json({ msg: "Server error" });
   }
 };
+
