@@ -271,3 +271,128 @@ export const getAllUsersBalanceReport = async (req: Request, res: Response) => {
     return res.status(500).json({ msg: "Server error", error });
   }
 };
+
+export const editBalance = async (req: Request, res: Response) => {
+  try {
+    const { transactionId, flyashAmount = 0, bedashAmount = 0 } = req.body;
+    const currentUser = req.user!;
+
+    const transaction = await transactionRepo.findOne({
+      where: { id: transactionId },
+      relations: ["user"],
+    });
+
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    if (currentUser.role === "user")
+      return res.status(403).json({ msg: "❌ Access denied" });
+
+    /** accounts */
+    const flyashAccount = await accountRepo.findOne({
+      where: { user: { id: transaction.user.id }, materialType: "flyash" },
+    });
+
+    const bedashAccount = await accountRepo.findOne({
+      where: { user: { id: transaction.user.id }, materialType: "bedash" },
+    });
+
+    if (!flyashAccount || !bedashAccount)
+      return res.status(400).json({ msg: "Material account missing" });
+
+    /** old tons */
+    const oldFlyashTons = transaction.flyashTons;
+    const oldBedashTons = transaction.bedashTons;
+
+    /** new tons */
+    const newFlyashTons = flyashAmount / RATE_PER_TON;
+    const newBedashTons = bedashAmount / RATE_PER_TON;
+
+    /** remaining safety */
+    if (flyashAccount.remainingTons + oldFlyashTons < newFlyashTons)
+      return res.status(400).json({ msg: "❌ Flyash already used. Can't reduce." });
+
+    if (bedashAccount.remainingTons + oldBedashTons < newBedashTons)
+      return res.status(400).json({ msg: "❌ Bedash already used. Can't reduce." });
+
+    /** update accounts */
+    flyashAccount.totalTons = flyashAccount.totalTons - oldFlyashTons + newFlyashTons;
+    flyashAccount.remainingTons =
+      flyashAccount.remainingTons - oldFlyashTons + newFlyashTons;
+
+    bedashAccount.totalTons = bedashAccount.totalTons - oldBedashTons + newBedashTons;
+    bedashAccount.remainingTons =
+      bedashAccount.remainingTons - oldBedashTons + newBedashTons;
+
+    await accountRepo.save([flyashAccount, bedashAccount]);
+
+    /** update transaction */
+    transaction.flyashAmount = flyashAmount;
+    transaction.bedashAmount = bedashAmount;
+    transaction.totalAmount = flyashAmount + bedashAmount;
+    transaction.flyashTons = newFlyashTons;
+    transaction.bedashTons = newBedashTons;
+
+    await transactionRepo.save(transaction);
+
+    return res.json({ msg: "✅ Balance updated successfully", data: transaction });
+  } catch (error) {
+    console.error("Edit balance error:", error);
+    return res.status(500).json({ msg: "Server error" });
+  }
+};
+
+export const deleteBalance = async (req: Request, res: Response) => {
+  try {
+    const { transactionId } = req.params;
+    const currentUser = req.user!;
+
+    const transaction = await transactionRepo.findOne({
+      where: { id: Number(transactionId) },
+      relations: ["user"],
+    });
+
+    if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
+
+    if (currentUser.role === "user")
+      return res.status(403).json({ msg: "❌ Access denied" });
+
+    const flyashAccount = await accountRepo.findOne({
+      where: { user: { id: transaction.user.id }, materialType: "flyash" },
+    });
+
+    const bedashAccount = await accountRepo.findOne({
+      where: { user: { id: transaction.user.id }, materialType: "bedash" },
+    });
+
+    if (!flyashAccount || !bedashAccount)
+      return res.status(400).json({ msg: "Material account missing" });
+
+    /** safety check */
+    if (flyashAccount.remainingTons < transaction.flyashTons)
+      return res.status(400).json({
+        msg: "❌ Flyash already used. Can't delete balance.",
+      });
+
+    if (bedashAccount.remainingTons < transaction.bedashTons)
+      return res.status(400).json({
+        msg: "❌ Bedash already used. Can't delete balance.",
+      });
+
+    /** subtract tons */
+    flyashAccount.totalTons -= transaction.flyashTons;
+    flyashAccount.remainingTons -= transaction.flyashTons;
+
+    bedashAccount.totalTons -= transaction.bedashTons;
+    bedashAccount.remainingTons -= transaction.bedashTons;
+
+    await accountRepo.save([flyashAccount, bedashAccount]);
+
+    /** delete transaction */
+    await transactionRepo.remove(transaction);
+
+    return res.json({ msg: "🗑️ Balance deleted successfully" });
+  } catch (error) {
+    console.error("Delete balance error:", error);
+    return res.status(500).json({ msg: "Server error" });
+  }
+};
