@@ -13,10 +13,10 @@ const accountRepo = AppDataSource.getRepository(MaterialAccount);
 // ✅ CREATE BEDASH ENTRY
 export const createBedash = async (req: Request, res: Response) => {
   try {
-    const { userId, materialType, customDate, targetDate ,amount} = req.body;
+    const { userId, materialType, customDate, targetDate, amount } = req.body;
     const currentUser = (req as any).user;
 
-    if (!["admin", "superadmin" ,"user"].includes(currentUser.role)) {
+    if (!["admin", "superadmin", "user"].includes(currentUser.role)) {
       return res
         .status(403)
         .json({ msg: "❌ Only Admin/SuperAdmin can create" });
@@ -46,51 +46,6 @@ export const createBedash = async (req: Request, res: Response) => {
   }
 };
 
-// ✅ GET ALL BEDASH LIST
-// export const getBedashList = async (req: Request, res: Response) => {
-//   try {
-//     const currentUser = (req as any).user;
-//     let bedashList;
-
-//     // SuperAdmin/Admin -> all users, normal user -> only own
-//     if (["admin", "superadmin"].includes(currentUser.role)) {
-//       bedashList = await bedashRepo.find({ relations: ["user"] });
-//     } else {
-//       bedashList = await bedashRepo.find({
-//         where: { user: { id: currentUser.id } },
-//         relations: ["user"],
-//       });
-//     }
-
-//     // Calculate remaining tons dynamically from MaterialAccount
-//     const result = await Promise.all(
-//       bedashList.map(async (b) => {
-//         const account = await accountRepo.findOne({
-//           where: {
-//             user: { id: b.user.id },
-//             materialType: b.materialType as "flyash" | "bedash",
-//           },
-//         });
-
-//         return {
-//           id: b.id,
-//           userName: b.user.name,
-//           materialType: b.materialType,
-//           remainingTons: account ? account.remainingTons : 0,
-//           status: b.status,
-//           customDate: b.customDate,
-//           targetDate: b.targetDate,
-//           createdAt: b.createdAt,
-//         };
-//       })
-//     );
-
-//     res.json(result);
-//   } catch (err) {
-//     console.error("Error fetching bedash list:", err);
-//     res.status(500).json({ msg: "❌ Server error" });
-//   }
-// };
 export const getBedashList = async (req: Request, res: Response) => {
   try {
     const currentUser = (req as any).user;
@@ -98,8 +53,7 @@ export const getBedashList = async (req: Request, res: Response) => {
 
     if (currentUser.role === "superadmin") {
       bedashList = await bedashRepo.find({ relations: ["user", "createdBy"] });
-    } 
-    else if (currentUser.role === "admin") {
+    } else if (currentUser.role === "admin") {
       bedashList = await bedashRepo.find({
         where: [
           { createdBy: Equal(currentUser.id) },
@@ -107,8 +61,7 @@ export const getBedashList = async (req: Request, res: Response) => {
         ],
         relations: ["user", "createdBy"],
       });
-    } 
-    else {
+    } else {
       bedashList = await bedashRepo.find({
         where: { user: { id: Equal(currentUser.id) } },
         relations: ["user", "createdBy"],
@@ -134,7 +87,7 @@ export const getBedashList = async (req: Request, res: Response) => {
           targetDate: b.targetDate,
           createdAt: b.createdAt,
         };
-      })
+      }),
     );
 
     res.json(result);

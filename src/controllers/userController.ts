@@ -89,25 +89,6 @@ export const updateuser: RequestHandler = async (req, res) => {
   }
 };
 
-// export const deleteUser: RequestHandler = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const user = await userRepo.findOneBy({ id: parseInt(id) });
-//     if (!user) return res.status(404).json({ message: "User Not Found" });
-
-//     // ✅ Check if user is inactive
-//     if (user.isActive) {
-//       return res
-//         .status(403)
-//         .json({ message: "Active users cannot be deleted" });
-//     }
-
-//     await userRepo.remove(user);
-//     res.status(200).json({ message: "User Deleted Successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error Deleting User", error });
-//   }
-// };
 export const deleteUser: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;
