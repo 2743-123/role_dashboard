@@ -17,10 +17,17 @@ export const createToken = async (req: Request, res: Response) => {
     const user = await userRepo.findOne({ where: { id: userId } });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    const lastToken = await tokenRepo.findOne({
-      where: { customerName },
-      order: { id: "DESC" },
-    });
+    const adminId = user.role === "user" ? user.createdBy : user.id;
+
+    const lastToken = await tokenRepo
+      .createQueryBuilder("t")
+      .leftJoin("t.user", "u")
+      .where("t.customerName = :customerName", { customerName })
+      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+        adminId,
+      })
+      .orderBy("t.id", "DESC")
+      .getOne();
 
     const prevCarry = lastToken ? Number(lastToken.carryForward || 0) : 0;
 
@@ -87,14 +94,18 @@ export const updateToken = async (req: Request, res: Response) => {
     const newWeight = Number(weight);
     const diff = newWeight - oldWeight;
 
-    if (diff > 0 && diff > Number(account.remainingTons)) {
+    const safeRemaining = Number(account.remainingTons) + oldWeight; // rollback current token weight
+
+    if (newWeight > safeRemaining) {
       return res.status(400).json({
-        msg: `Insufficient balance. Available: ${account.remainingTons}`,
+        msg: `Insufficient balance. Available: ${safeRemaining}`,
       });
     }
 
-    account.usedTons += diff;
-    account.remainingTons -= diff;
+    // apply diff
+    account.usedTons = account.usedTons - oldWeight + newWeight;
+    account.remainingTons = safeRemaining - newWeight;
+
     await accountRepo.save(account);
 
     /** billing */
@@ -102,10 +113,17 @@ export const updateToken = async (req: Request, res: Response) => {
     const totalAmount = newWeight * ratePerTon + Number(commission);
 
     /** previous carry */
+    const adminId =
+      targetUser.role === "user" ? targetUser.createdBy : targetUser.id;
+
     const prevToken = await tokenRepo
       .createQueryBuilder("t")
+      .leftJoin("t.user", "u")
       .where("t.customerName = :customerName", {
         customerName: token.customerName,
+      })
+      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+        adminId,
       })
       .andWhere("t.id < :id", { id: token.id })
       .orderBy("t.id", "DESC")
@@ -114,7 +132,16 @@ export const updateToken = async (req: Request, res: Response) => {
     const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
 
     /** running due */
-    const carryForward = Number((prevCarry - totalAmount).toFixed(2));
+    const oldTotalAmount = Number(token.totalAmount || 0);
+    const diffAmount = totalAmount - oldTotalAmount;
+
+    // base carry choose
+    const baseCarry =
+      oldTotalAmount === 0
+        ? prevCarry // first time update
+        : Number(token.carryForward || 0); // already updated token
+
+    const carryForward = Number((baseCarry - diffAmount).toFixed(2));
 
     /** 🆕 update fields */
     token.user = targetUser;
@@ -154,15 +181,32 @@ export const confirmToken = async (req: Request, res: Response) => {
       return res.status(403).json({ msg: "Access denied" });
     }
 
-    const tokens = await tokenRepo.find({
-      where: { customerName: token.customerName },
-      order: { id: "ASC" },
-    });
+    const adminId =
+      token.user.role === "user" ? token.user.createdBy : token.user.id;
+
+    const tokens = await tokenRepo
+      .createQueryBuilder("t")
+      .leftJoinAndSelect("t.user", "u")
+      .where("t.customerName = :customerName", {
+        customerName: token.customerName,
+      })
+      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+        adminId,
+      })
+      .orderBy("t.id", "ASC")
+      .getMany();
 
     let remainingPayment = Number(paidAmount);
 
     for (const t of tokens) {
       const total = Number(t.totalAmount || 0);
+
+      // ⭐⭐⭐ CRITICAL FIX — skip empty tokens
+      if (total <= 0) {
+        await tokenRepo.save(t);
+        continue;
+      }
+
       const alreadyPaid = Number(t.paidAmount || 0);
       const due = total - alreadyPaid;
 
