@@ -18,11 +18,11 @@ export class MaterialAccount {
   @Column("float", { default: 0 })
   totalTons!: number;
 
-  @Column({ type: "decimal", default: 0 })
-  remainingTons!: number;
-
-  @Column({ type: "decimal", default: 0 })
+  @Column("float", { default: 0 })
   usedTons!: number;
+
+  @Column("float", { default: 0 })
+  remainingTons!: number;
 
   @UpdateDateColumn()
   updatedAt!: Date;
