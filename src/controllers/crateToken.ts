@@ -58,61 +58,82 @@ export const createToken = async (req: Request, res: Response) => {
 
 export const updateToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, userId, truckNumber, weight, commission } = req.body; // 🆕 truck added
+    const { tokenId, userId, truckNumber, weight, commission } = req.body;
     const currentUser = (req as any).user;
 
+    /** 🔹 find token */
     const token = await tokenRepo.findOne({
       where: { id: tokenId },
       relations: ["user"],
     });
 
-    if (!token) return res.status(404).json({ msg: "Token not found" });
+    if (!token) {
+      return res.status(404).json({ msg: "Token not found" });
+    }
 
+    /** 🔹 access control */
     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
+    /** 🔹 target user decide */
     let targetUser = token.user;
 
     if (["admin", "superadmin"].includes(currentUser.role)) {
-      const newUser = await userRepo.findOne({ where: { id: userId } });
-      if (!newUser)
-        return res.status(404).json({ msg: "Target user not found" });
-      targetUser = newUser;
+      if (userId) {
+        const newUser = await userRepo.findOne({ where: { id: userId } });
+        if (!newUser) {
+          return res.status(404).json({ msg: "Target user not found" });
+        }
+        targetUser = newUser;
+      }
     }
 
-    /** material account */
+    /** 🔹 material account */
     const account = await accountRepo.findOne({
-      where: { user: { id: targetUser.id }, materialType: token.materialType },
+      where: {
+        user: { id: targetUser.id },
+        materialType: token.materialType,
+      },
     });
 
-    if (!account)
+    if (!account) {
       return res.status(400).json({ msg: "Material account not found" });
+    }
 
-    /** weight diff */
-    const oldWeight = token.weight || 0;
-    const newWeight = Number(weight);
-    const diff = newWeight - oldWeight;
+    /** =====================================================
+     * ✅ WEIGHT SAFE UPDATE (MOST IMPORTANT PART)
+     ======================================================*/
 
-    const safeRemaining = Number(account.remainingTons) + oldWeight; // rollback current token weight
+    const oldWeight = Number(token.weight || 0);
+    const newWeight = Number(weight || 0);
 
+    // rollback current token weight
+    const safeRemaining = Number(account.remainingTons) + oldWeight;
+
+    // check balance
     if (newWeight > safeRemaining) {
       return res.status(400).json({
         msg: `Insufficient balance. Available: ${safeRemaining}`,
       });
     }
 
-    // apply diff
-    account.usedTons = account.usedTons - oldWeight + newWeight;
+    // apply new values
+    account.usedTons = Number(account.usedTons) - oldWeight + newWeight;
+
     account.remainingTons = safeRemaining - newWeight;
 
     await accountRepo.save(account);
 
-    /** billing */
-    const ratePerTon = 180;
-    const totalAmount = newWeight * ratePerTon + Number(commission);
+    /** =====================================================
+     * ✅ BILLING
+     ======================================================*/
 
-    /** previous carry */
+    const ratePerTon = 180;
+    const commissionNum = Number(commission || 0);
+    const totalAmount = newWeight * ratePerTon + commissionNum;
+
+    /** 🔹 previous carry finder */
     const adminId =
       targetUser.role === "user" ? targetUser.createdBy : targetUser.id;
 
@@ -131,23 +152,23 @@ export const updateToken = async (req: Request, res: Response) => {
 
     const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
 
-    /** running due */
+    /** 🔹 running carry logic */
     const oldTotalAmount = Number(token.totalAmount || 0);
     const diffAmount = totalAmount - oldTotalAmount;
 
-    // base carry choose
     const baseCarry =
-      oldTotalAmount === 0
-        ? prevCarry // first time update
-        : Number(token.carryForward || 0); // already updated token
+      oldTotalAmount === 0 ? prevCarry : Number(token.carryForward || 0);
 
     const carryForward = Number((baseCarry - diffAmount).toFixed(2));
 
-    /** 🆕 update fields */
+    /** =====================================================
+     * ✅ UPDATE TOKEN
+     ======================================================*/
+
     token.user = targetUser;
-    token.truckNumber = truckNumber; // ⭐ added
+    token.truckNumber = truckNumber;
     token.weight = newWeight;
-    token.commission = Number(commission);
+    token.commission = commissionNum;
     token.ratePerTon = ratePerTon;
     token.totalAmount = totalAmount;
     token.carryForward = carryForward;
