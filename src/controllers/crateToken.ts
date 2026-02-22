@@ -10,19 +10,9 @@ const tokenRepo = AppDataSource.getRepository(Token);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 const userRepo = AppDataSource.getRepository(User);
 
-
-/** ⭐ SAFE NUMBER HELPER (NaN FIX) */
-const toNumber = (val: any) => {
-  const num = Number(val);
-  return isNaN(num) ? 0 : num;
-};
-
-/* ======================================================
-   CREATE TOKEN
-====================================================== */
 export const createToken = async (req: Request, res: Response) => {
   try {
-    const { customerName, materialType, userId } = req.body;
+    const { customerName, materialType, userId } = req.body; // ❌ truck removed
 
     const user = await userRepo.findOne({ where: { id: userId } });
     if (!user) return res.status(404).json({ msg: "User not found" });
@@ -39,7 +29,9 @@ export const createToken = async (req: Request, res: Response) => {
       .orderBy("t.id", "DESC")
       .getOne();
 
-    const prevCarry = lastToken ? toNumber(lastToken.carryForward) : 0;
+    const prevCarry = lastToken ? Number(lastToken.carryForward || 0) : 0;
+
+    /** only ADVANCE forward */
     const carryForward = prevCarry > 0 ? prevCarry : 0;
 
     const token = tokenRepo.create({
@@ -49,7 +41,7 @@ export const createToken = async (req: Request, res: Response) => {
       status: "pending",
       carryForward,
       paidAmount: carryForward > 0 ? carryForward : 0,
-      truckNumber: undefined,
+      truckNumber: undefined, // 🆕 truck later
       weight: 0,
       commission: 0,
       totalAmount: 0,
@@ -64,12 +56,9 @@ export const createToken = async (req: Request, res: Response) => {
   }
 };
 
-/* ======================================================
-   UPDATE TOKEN (NaN SAFE)
-====================================================== */
 export const updateToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, userId, truckNumber, weight, commission } = req.body;
+    const { tokenId, userId, truckNumber, weight, commission } = req.body; // 🆕 truck added
     const currentUser = (req as any).user;
 
     const token = await tokenRepo.findOne({
@@ -85,32 +74,27 @@ export const updateToken = async (req: Request, res: Response) => {
 
     let targetUser = token.user;
 
-    if (["admin", "superadmin"].includes(currentUser.role) && userId) {
+    if (["admin", "superadmin"].includes(currentUser.role)) {
       const newUser = await userRepo.findOne({ where: { id: userId } });
       if (!newUser)
         return res.status(404).json({ msg: "Target user not found" });
       targetUser = newUser;
     }
 
+    /** material account */
     const account = await accountRepo.findOne({
-      where: {
-        user: { id: targetUser.id },
-        materialType: token.materialType,
-      },
+      where: { user: { id: targetUser.id }, materialType: token.materialType },
     });
 
     if (!account)
       return res.status(400).json({ msg: "Material account not found" });
 
-    /** ================= SAFE TON UPDATE ================= */
+    /** weight diff */
+    const oldWeight = token.weight || 0;
+    const newWeight = Number(weight);
+    const diff = newWeight - oldWeight;
 
-    const oldWeight = toNumber(token.weight);
-    const newWeight = toNumber(weight);
-
-    const remainingTons = toNumber(account.remainingTons);
-    const usedTons = toNumber(account.usedTons);
-
-    const safeRemaining = remainingTons + oldWeight;
+    const safeRemaining = Number(account.remainingTons) + oldWeight; // rollback current token weight
 
     if (newWeight > safeRemaining) {
       return res.status(400).json({
@@ -118,17 +102,17 @@ export const updateToken = async (req: Request, res: Response) => {
       });
     }
 
-    account.usedTons = usedTons - oldWeight + newWeight;
+    // apply diff
+    account.usedTons = account.usedTons - oldWeight + newWeight;
     account.remainingTons = safeRemaining - newWeight;
 
     await accountRepo.save(account);
 
-    /** ================= BILLING ================= */
-
+    /** billing */
     const ratePerTon = 180;
-    const commissionNum = toNumber(commission);
-    const totalAmount = newWeight * ratePerTon + commissionNum;
+    const totalAmount = newWeight * ratePerTon + Number(commission);
 
+    /** previous carry */
     const adminId =
       targetUser.role === "user" ? targetUser.createdBy : targetUser.id;
 
@@ -145,22 +129,25 @@ export const updateToken = async (req: Request, res: Response) => {
       .orderBy("t.id", "DESC")
       .getOne();
 
-    const prevCarry = prevToken ? toNumber(prevToken.carryForward) : 0;
+    const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
 
-    const oldTotalAmount = toNumber(token.totalAmount);
+    /** running due */
+    const oldTotalAmount = Number(token.totalAmount || 0);
     const diffAmount = totalAmount - oldTotalAmount;
 
+    // base carry choose
     const baseCarry =
-      oldTotalAmount === 0 ? prevCarry : toNumber(token.carryForward);
+      oldTotalAmount === 0
+        ? prevCarry // first time update
+        : Number(token.carryForward || 0); // already updated token
 
     const carryForward = Number((baseCarry - diffAmount).toFixed(2));
 
-    /** ================= UPDATE TOKEN ================= */
-
+    /** 🆕 update fields */
     token.user = targetUser;
-    token.truckNumber = truckNumber;
+    token.truckNumber = truckNumber; // ⭐ added
     token.weight = newWeight;
-    token.commission = commissionNum;
+    token.commission = Number(commission);
     token.ratePerTon = ratePerTon;
     token.totalAmount = totalAmount;
     token.carryForward = carryForward;
@@ -177,7 +164,6 @@ export const updateToken = async (req: Request, res: Response) => {
     return res.status(500).json({ msg: "Server error" });
   }
 };
-
 
 export const confirmToken = async (req: Request, res: Response) => {
   try {
