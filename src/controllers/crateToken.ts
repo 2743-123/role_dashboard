@@ -91,20 +91,19 @@ export const updateToken = async (req: Request, res: Response) => {
 
     /** weight diff */
     const oldWeight = token.weight || 0;
-    const newWeight = Number(weight);
-    const diff = newWeight - oldWeight;
+const newWeight = Number(weight);
+const diff = newWeight - oldWeight;
 
-    const safeRemaining = Number(account.remainingTons) + oldWeight; // rollback current token weight
+// only check additional usage
+if (diff > 0 && diff > account.remainingTons) {
+  return res.status(400).json({
+    msg: `Insufficient balance. Available: ${account.remainingTons}`,
+  });
+}
 
-    if (newWeight > safeRemaining) {
-      return res.status(400).json({
-        msg: `Insufficient balance. Available: ${safeRemaining}`,
-      });
-    }
-
-    // apply diff
-    account.usedTons = account.usedTons - oldWeight + newWeight;
-    account.remainingTons = safeRemaining - newWeight;
+// apply diff only
+account.usedTons += diff;
+account.remainingTons -= diff;
 
     await accountRepo.save(account);
 
