@@ -140,7 +140,7 @@ account.remainingTons -= diff;
         ? prevCarry // first time update
         : Number(token.carryForward || 0); // already updated token
 
-    const carryForward = Number((baseCarry - diffAmount).toFixed(2));
+    const carryForward = Number((prevCarry - totalAmount).toFixed(2));
 
     /** 🆕 update fields */
     token.user = targetUser;
@@ -153,6 +153,32 @@ account.remainingTons -= diff;
     token.status = carryForward === 0 ? "completed" : "updated";
 
     await tokenRepo.save(token);
+    // 🔥 RE-CALCULATE NEXT TOKENS (VERY IMPORTANT)
+const nextTokens = await tokenRepo
+  .createQueryBuilder("t")
+  .leftJoin("t.user", "u")
+  .where("t.customerName = :customerName", {
+    customerName: token.customerName,
+  })
+  .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+    adminId,
+  })
+  .andWhere("t.id > :id", { id: token.id })
+  .orderBy("t.id", "ASC")
+  .getMany();
+
+let runningCarry = carryForward;
+
+for (const t of nextTokens) {
+  runningCarry = Number(
+    (runningCarry - Number(t.totalAmount || 0)).toFixed(2)
+  );
+
+  t.carryForward = runningCarry;
+  t.status = runningCarry === 0 ? "completed" : "updated";
+
+  await tokenRepo.save(t);
+}
 
     return res.json({
       msg: "✅ Token updated with truck & billing",
