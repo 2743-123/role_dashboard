@@ -58,7 +58,7 @@ export const createToken = async (req: Request, res: Response) => {
 
 export const updateToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, userId, truckNumber, weight, commission } = req.body; // 🆕 truck added
+    const { tokenId, userId, truckNumber, weight, commission } = req.body;
     const currentUser = (req as any).user;
 
     const token = await tokenRepo.findOne({
@@ -91,19 +91,17 @@ export const updateToken = async (req: Request, res: Response) => {
 
     /** weight diff */
     const oldWeight = token.weight || 0;
-const newWeight = Number(weight);
-const diff = newWeight - oldWeight;
+    const newWeight = Number(weight);
+    const diff = newWeight - oldWeight;
 
-// only check additional usage
-if (diff > 0 && diff > account.remainingTons) {
-  return res.status(400).json({
-    msg: `Insufficient balance. Available: ${account.remainingTons}`,
-  });
-}
+    if (diff > 0 && diff > account.remainingTons) {
+      return res.status(400).json({
+        msg: `Insufficient balance. Available: ${account.remainingTons}`,
+      });
+    }
 
-// apply diff only
-account.usedTons += diff;
-account.remainingTons -= diff;
+    account.usedTons += diff;
+    account.remainingTons -= diff;
 
     await accountRepo.save(account);
 
@@ -130,21 +128,12 @@ account.remainingTons -= diff;
 
     const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
 
-    /** running due */
-    const oldTotalAmount = Number(token.totalAmount || 0);
-    const diffAmount = totalAmount - oldTotalAmount;
-
-    // base carry choose
-    const baseCarry =
-      oldTotalAmount === 0
-        ? prevCarry // first time update
-        : Number(token.carryForward || 0); // already updated token
-
+    /** ✅ correct carry (ONLY THIS RULE) */
     const carryForward = Number((prevCarry - totalAmount).toFixed(2));
 
-    /** 🆕 update fields */
+    /** update current token */
     token.user = targetUser;
-    token.truckNumber = truckNumber; // ⭐ added
+    token.truckNumber = truckNumber;
     token.weight = newWeight;
     token.commission = Number(commission);
     token.ratePerTon = ratePerTon;
@@ -153,35 +142,61 @@ account.remainingTons -= diff;
     token.status = carryForward === 0 ? "completed" : "updated";
 
     await tokenRepo.save(token);
-    // 🔥 RE-CALCULATE NEXT TOKENS (VERY IMPORTANT)
-const nextTokens = await tokenRepo
-  .createQueryBuilder("t")
-  .leftJoin("t.user", "u")
-  .where("t.customerName = :customerName", {
-    customerName: token.customerName,
-  })
-  .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
-    adminId,
-  })
-  .andWhere("t.id > :id", { id: token.id })
-  .orderBy("t.id", "ASC")
-  .getMany();
 
-let runningCarry = carryForward;
+    // 🔥 RE-CALCULATE NEXT TOKENS
+    const nextTokens = await tokenRepo
+      .createQueryBuilder("t")
+      .leftJoin("t.user", "u")
+      .where("t.customerName = :customerName", {
+        customerName: token.customerName,
+      })
+      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+        adminId,
+      })
+      .andWhere("t.id > :id", { id: token.id })
+      .orderBy("t.id", "ASC")
+      .getMany();
 
-for (const t of nextTokens) {
-  runningCarry = Number(
-    (runningCarry - Number(t.totalAmount || 0)).toFixed(2)
-  );
+    let runningCarry = carryForward;
 
-  t.carryForward = runningCarry;
-  t.status = runningCarry === 0 ? "completed" : "updated";
+    for (const t of nextTokens) {
 
-  await tokenRepo.save(t);
-}
+      // completed token lock
+      if (t.status === "completed") {
+        continue;
+      }
+
+      const total = Number(t.totalAmount || 0);
+      const paid = Number(t.paidAmount || 0);
+
+      // ⭐ MAIN FIX
+      const remainingDue = total - paid;
+
+      runningCarry = Number(
+        (
+          runningCarry - remainingDue
+        ).toFixed(2)
+      );
+
+      t.carryForward = runningCarry;
+
+      t.status =
+        runningCarry === 0
+          ? "completed"
+          : "updated";
+    }
+
+    if (nextTokens.length > 0) {
+      await tokenRepo.save(nextTokens);
+    }
+
+    // ✅ bulk save (important fix)
+    if (nextTokens.length > 0) {
+      await tokenRepo.save(nextTokens);
+    }
 
     return res.json({
-      msg: "✅ Token updated with truck & billing",
+      msg: "✅ Token updated with correct carry chain",
       data: token,
     });
   } catch (err) {
@@ -190,6 +205,233 @@ for (const t of nextTokens) {
   }
 };
 
+// export const updateToken = async (req: Request, res: Response) => {
+//   try {
+//     const { tokenId, userId, truckNumber, weight, commission } = req.body; // 🆕 truck added
+//     const currentUser = (req as any).user;
+
+//     const token = await tokenRepo.findOne({
+//       where: { id: tokenId },
+//       relations: ["user"],
+//     });
+
+//     if (!token) return res.status(404).json({ msg: "Token not found" });
+
+//     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
+//       return res.status(403).json({ msg: "Access denied" });
+//     }
+
+//     let targetUser = token.user;
+
+//     if (["admin", "superadmin"].includes(currentUser.role)) {
+//       const newUser = await userRepo.findOne({ where: { id: userId } });
+//       if (!newUser)
+//         return res.status(404).json({ msg: "Target user not found" });
+//       targetUser = newUser;
+//     }
+
+//     /** material account */
+//     const account = await accountRepo.findOne({
+//       where: { user: { id: targetUser.id }, materialType: token.materialType },
+//     });
+
+//     if (!account)
+//       return res.status(400).json({ msg: "Material account not found" });
+
+//     /** weight diff */
+//     const oldWeight = token.weight || 0;
+// const newWeight = Number(weight);
+// const diff = newWeight - oldWeight;
+
+// // only check additional usage
+// if (diff > 0 && diff > account.remainingTons) {
+//   return res.status(400).json({
+//     msg: `Insufficient balance. Available: ${account.remainingTons}`,
+//   });
+// }
+
+// // apply diff only
+// account.usedTons += diff;
+// account.remainingTons -= diff;
+
+//     await accountRepo.save(account);
+
+//     /** billing */
+//     const ratePerTon = 180;
+//     const totalAmount = newWeight * ratePerTon + Number(commission);
+
+//     /** previous carry */
+//     const adminId =
+//       targetUser.role === "user" ? targetUser.createdBy : targetUser.id;
+
+//     const prevToken = await tokenRepo
+//       .createQueryBuilder("t")
+//       .leftJoin("t.user", "u")
+//       .where("t.customerName = :customerName", {
+//         customerName: token.customerName,
+//       })
+//       .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+//         adminId,
+//       })
+//       .andWhere("t.id < :id", { id: token.id })
+//       .orderBy("t.id", "DESC")
+//       .getOne();
+
+//     const prevCarry = prevToken ? Number(prevToken.carryForward || 0) : 0;
+
+//     /** running due */
+//     const oldTotalAmount = Number(token.totalAmount || 0);
+//     const diffAmount = totalAmount - oldTotalAmount;
+
+//     // base carry choose
+//     const baseCarry =
+//       oldTotalAmount === 0
+//         ? prevCarry // first time update
+//         : Number(token.carryForward || 0); // already updated token
+
+//     const carryForward = Number((prevCarry - totalAmount).toFixed(2));
+
+//     /** 🆕 update fields */
+//     token.user = targetUser;
+//     token.truckNumber = truckNumber; // ⭐ added
+//     token.weight = newWeight;
+//     token.commission = Number(commission);
+//     token.ratePerTon = ratePerTon;
+//     token.totalAmount = totalAmount;
+//     token.carryForward = carryForward;
+//     token.status = carryForward === 0 ? "completed" : "updated";
+
+//     await tokenRepo.save(token);
+//     // 🔥 RE-CALCULATE NEXT TOKENS (VERY IMPORTANT)
+// const nextTokens = await tokenRepo
+//   .createQueryBuilder("t")
+//   .leftJoin("t.user", "u")
+//   .where("t.customerName = :customerName", {
+//     customerName: token.customerName,
+//   })
+//   .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+//     adminId,
+//   })
+//   .andWhere("t.id > :id", { id: token.id })
+//   .orderBy("t.id", "ASC")
+//   .getMany();
+
+// let runningCarry = carryForward;
+
+// for (const t of nextTokens) {
+//   runningCarry = Number(
+//     (runningCarry - Number(t.totalAmount || 0)).toFixed(2)
+//   );
+
+//   t.carryForward = runningCarry;
+//   t.status = runningCarry === 0 ? "completed" : "updated";
+
+//   await tokenRepo.save(t);
+// }
+
+//     return res.json({
+//       msg: "✅ Token updated with truck & billing",
+//       data: token,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ msg: "Server error" });
+//   }
+// };
+
+// export const confirmToken = async (req: Request, res: Response) => {
+//   try {
+//     const { tokenId, paidAmount } = req.body;
+//     const currentUser = req.user!;
+
+//     const token = await tokenRepo.findOne({
+//       where: { id: tokenId },
+//       relations: ["user"],
+//     });
+
+//     if (!token) return res.status(404).json({ msg: "Token not found" });
+
+//     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
+//       return res.status(403).json({ msg: "Access denied" });
+//     }
+
+//     const adminId =
+//       token.user.role === "user" ? token.user.createdBy : token.user.id;
+
+//     const tokens = await tokenRepo
+//       .createQueryBuilder("t")
+//       .leftJoinAndSelect("t.user", "u")
+//       .where("t.customerName = :customerName", {
+//         customerName: token.customerName,
+//       })
+//       .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", {
+//         adminId,
+//       })
+//       .orderBy("t.id", "ASC")
+//       .getMany();
+
+//     let remainingPayment = Number(paidAmount);
+
+//     for (const t of tokens) {
+//       const total = Number(t.totalAmount || 0);
+
+//       // ⭐⭐⭐ CRITICAL FIX — skip empty tokens
+//       if (total <= 0) {
+//         await tokenRepo.save(t);
+//         continue;
+//       }
+
+//       const alreadyPaid = Number(t.paidAmount || 0);
+//       const due = total - alreadyPaid;
+
+//       /** 🛑 first reset carry of old tokens */
+//       t.carryForward = 0;
+
+//       if (remainingPayment <= 0) {
+//         await tokenRepo.save(t);
+//         continue;
+//       }
+
+//       if (remainingPayment >= due) {
+//         /** fully paid */
+//         t.paidAmount = total;
+//         t.status = "completed";
+//         t.confirmedAt = new Date();
+
+//         remainingPayment -= due;
+//       } else {
+//         /** partial */
+//         t.paidAmount = alreadyPaid + remainingPayment;
+//         t.carryForward = Number((t.paidAmount - total).toFixed(2)); // negative
+//         t.status = "updated";
+//         t.confirmedAt = new Date();
+
+//         remainingPayment = 0;
+//       }
+
+//       await tokenRepo.save(t);
+//     }
+
+//     /** advance case → ONLY last token */
+//     if (remainingPayment > 0 && tokens.length > 0) {
+//       const last = tokens[tokens.length - 1];
+
+//       last.carryForward = Number(remainingPayment.toFixed(2)); // positive
+//       last.status = "completed";
+//       last.confirmedAt = new Date();
+
+//       await tokenRepo.save(last);
+//     }
+
+//     return res.json({
+//       msg: "✅ Ledger perfectly balanced",
+//       customerName: token.customerName,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ msg: "Server error" });
+//   }
+// };
 export const confirmToken = async (req: Request, res: Response) => {
   try {
     const { tokenId, paidAmount } = req.body;
@@ -200,15 +442,20 @@ export const confirmToken = async (req: Request, res: Response) => {
       relations: ["user"],
     });
 
-    if (!token) return res.status(404).json({ msg: "Token not found" });
+    if (!token) {
+      return res.status(404).json({ msg: "Token not found" });
+    }
 
     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
     const adminId =
-      token.user.role === "user" ? token.user.createdBy : token.user.id;
+      token.user.role === "user"
+        ? token.user.createdBy
+        : token.user.id;
 
+    /** all customer tokens */
     const tokens = await tokenRepo
       .createQueryBuilder("t")
       .leftJoinAndSelect("t.user", "u")
@@ -226,34 +473,56 @@ export const confirmToken = async (req: Request, res: Response) => {
     for (const t of tokens) {
       const total = Number(t.totalAmount || 0);
 
-      // ⭐⭐⭐ CRITICAL FIX — skip empty tokens
+      /** skip invalid tokens */
       if (total <= 0) {
-        await tokenRepo.save(t);
         continue;
       }
 
       const alreadyPaid = Number(t.paidAmount || 0);
+
+      /** remaining due */
       const due = total - alreadyPaid;
 
-      /** 🛑 first reset carry of old tokens */
-      t.carryForward = 0;
+      /** already completed skip */
+      if (due <= 0) {
+        t.carryForward = 0;
+        t.status = "completed";
 
-      if (remainingPayment <= 0) {
         await tokenRepo.save(t);
         continue;
       }
 
+      /** payment finished */
+      if (remainingPayment <= 0) {
+        const remainingDue = total - alreadyPaid;
+
+        t.carryForward = Number((-remainingDue).toFixed(2));
+
+        t.status =
+          remainingDue === 0 ? "completed" : "updated";
+
+        await tokenRepo.save(t);
+        continue;
+      }
+
+      /** full payment */
       if (remainingPayment >= due) {
-        /** fully paid */
         t.paidAmount = total;
+
+        t.carryForward = 0;
+
         t.status = "completed";
         t.confirmedAt = new Date();
 
         remainingPayment -= due;
       } else {
-        /** partial */
+        /** partial payment */
         t.paidAmount = alreadyPaid + remainingPayment;
-        t.carryForward = Number((t.paidAmount - total).toFixed(2)); // negative
+
+        const remainingDue = total - t.paidAmount;
+
+        t.carryForward = Number((-remainingDue).toFixed(2));
+
         t.status = "updated";
         t.confirmedAt = new Date();
 
@@ -263,11 +532,14 @@ export const confirmToken = async (req: Request, res: Response) => {
       await tokenRepo.save(t);
     }
 
-    /** advance case → ONLY last token */
+    /** advance payment case */
     if (remainingPayment > 0 && tokens.length > 0) {
       const last = tokens[tokens.length - 1];
 
-      last.carryForward = Number(remainingPayment.toFixed(2)); // positive
+      last.carryForward = Number(
+        remainingPayment.toFixed(2)
+      );
+
       last.status = "completed";
       last.confirmedAt = new Date();
 
@@ -280,7 +552,10 @@ export const confirmToken = async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ msg: "Server error" });
+
+    return res.status(500).json({
+      msg: "Server error",
+    });
   }
 };
 
