@@ -5,7 +5,6 @@ import { User } from "../models/User";
 import { Token } from "../models/Token";
 import { MaterialAccount } from "../models/materialaccount";
 import { PaymentHistory } from "../models/PaymentHistory";
-import { Transaction } from "../models/Transaction";
 import stream from "stream";
 
 // 🔹 BACKUP EXPORT TO GOOGLE DRIVE
@@ -19,13 +18,12 @@ export const exportBackup = async (req: Request, res: Response) => {
     oauth2Client.setCredentials({ access_token: googleToken });
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-    // Fetch all database data (transactions ko bhi include kar liya hai)
+    // Fetch all database data
     const backupData = {
       users: await AppDataSource.getRepository(User).find({ relations: ["creator"] }),
       tokens: await AppDataSource.getRepository(Token).find({ relations: ["user"] }),
       materialAccounts: await AppDataSource.getRepository(MaterialAccount).find({ relations: ["user"] }),
       paymentHistory: await AppDataSource.getRepository(PaymentHistory).find({ relations: ["user", "admin"] }),
-      transactions: await AppDataSource.getRepository(Transaction).find(),
     };
 
     // Convert data to JSON stream
@@ -35,7 +33,7 @@ export const exportBackup = async (req: Request, res: Response) => {
     const fileMetadata = { name: "bricks_admin_backup.json", mimeType: "application/json" };
     const media = { mimeType: "application/json", body: bufferStream };
 
-    // Upload to Google Drive (Agar purani file hai toh overwrite/update ya nayi create karega)
+    // Upload to Google Drive
     await drive.files.create({
       requestBody: fileMetadata,
       media: media,
@@ -49,7 +47,6 @@ export const exportBackup = async (req: Request, res: Response) => {
   }
 };
 
-// 🔹 RESTORE IMPORT FROM GOOGLE DRIVE
 // 🔹 RESTORE IMPORT FROM GOOGLE DRIVE
 export const importBackup = async (req: Request, res: Response) => {
   try {
@@ -84,42 +81,26 @@ export const importBackup = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "Invalid backup file format" });
     }
 
-    // ⭐ Restore Data to Database (Temporarily disable foreign keys to prevent constraint errors)
-    await AppDataSource.transaction(async (manager) => {
-      // 1. Disable foreign key checks for this session
-      await manager.query(`SET session_replication_role = 'replica';`);
+    // ⭐ Restore Data to Database (Clear existing and insert backup)
+    await AppDataSource.transaction(async (transactionalEntityManager) => {
+      // CLEAR TABLES (Reverse order due to foreign keys)
+      await transactionalEntityManager.clear(PaymentHistory);
+      await transactionalEntityManager.clear(Token);
+      await transactionalEntityManager.clear(MaterialAccount);
+      // Optional: Don't clear users if you want to keep admin accounts safe, 
+      // but if you want 100% clone, you can clear and restore them too.
+      // await transactionalEntityManager.clear(User); 
 
-      // 2. Clear all tables safely
-      await manager.query(`TRUNCATE TABLE "payment_history" RESTART IDENTITY CASCADE;`);
-      await manager.query(`TRUNCATE TABLE "material_account" RESTART IDENTITY CASCADE;`);
-      await manager.query(`TRUNCATE TABLE "token" RESTART IDENTITY CASCADE;`);
-      await manager.query(`TRUNCATE TABLE "transaction" RESTART IDENTITY CASCADE;`);
-      await manager.query(`TRUNCATE TABLE "user" RESTART IDENTITY CASCADE;`);
-
-      // 3. RESTORE DATA
-      if (backupData.users?.length > 0) {
-        await manager.getRepository(User).save(backupData.users);
-      }
-      if (backupData.transactions?.length > 0) {
-        await manager.getRepository(Transaction).save(backupData.transactions);
-      }
-      if (backupData.materialAccounts?.length > 0) {
-        await manager.getRepository(MaterialAccount).save(backupData.materialAccounts);
-      }
-      if (backupData.tokens?.length > 0) {
-        await manager.getRepository(Token).save(backupData.tokens);
-      }
-      if (backupData.paymentHistory?.length > 0) {
-        await manager.getRepository(PaymentHistory).save(backupData.paymentHistory);
-      }
-
-      // 4. Re-enable foreign key checks
-      await manager.query(`SET session_replication_role = 'origin';`);
+      // RESTORE DATA
+      if (backupData.users.length > 0) await transactionalEntityManager.save(User, backupData.users);
+      if (backupData.materialAccounts.length > 0) await transactionalEntityManager.save(MaterialAccount, backupData.materialAccounts);
+      if (backupData.tokens.length > 0) await transactionalEntityManager.save(Token, backupData.tokens);
+      if (backupData.paymentHistory.length > 0) await transactionalEntityManager.save(PaymentHistory, backupData.paymentHistory);
     });
 
     return res.json({ msg: "✅ Database successfully restored from Google Drive!" });
-  } catch (err: any) {
-    console.error("Restore Error Details:", err.message || err);
-    return res.status(500).json({ msg: "Server error during restore", error: err.message });
+  } catch (err) {
+    console.error("Restore Error:", err);
+    return res.status(500).json({ msg: "Server error during restore" });
   }
 };
