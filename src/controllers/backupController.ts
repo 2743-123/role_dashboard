@@ -50,6 +50,7 @@ export const exportBackup = async (req: Request, res: Response) => {
 };
 
 // 🔹 RESTORE IMPORT FROM GOOGLE DRIVE
+// 🔹 RESTORE IMPORT FROM GOOGLE DRIVE
 export const importBackup = async (req: Request, res: Response) => {
   try {
     const { googleToken } = req.body;
@@ -83,16 +84,19 @@ export const importBackup = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "Invalid backup file format" });
     }
 
-    // ⭐ Restore Data to Database using PostgreSQL CASCADE Truncate
+    // ⭐ Restore Data to Database (Temporarily disable foreign keys to prevent constraint errors)
     await AppDataSource.transaction(async (manager) => {
-      // Foreign key constraints bypass karne ke liye TRUNCATE CASCADE use karein
+      // 1. Disable foreign key checks for this session
+      await manager.query(`SET session_replication_role = 'replica';`);
+
+      // 2. Clear all tables safely
       await manager.query(`TRUNCATE TABLE "payment_history" RESTART IDENTITY CASCADE;`);
       await manager.query(`TRUNCATE TABLE "material_account" RESTART IDENTITY CASCADE;`);
       await manager.query(`TRUNCATE TABLE "token" RESTART IDENTITY CASCADE;`);
       await manager.query(`TRUNCATE TABLE "transaction" RESTART IDENTITY CASCADE;`);
       await manager.query(`TRUNCATE TABLE "user" RESTART IDENTITY CASCADE;`);
 
-      // RESTORE DATA IN PROPER ORDER
+      // 3. RESTORE DATA
       if (backupData.users?.length > 0) {
         await manager.getRepository(User).save(backupData.users);
       }
@@ -102,17 +106,20 @@ export const importBackup = async (req: Request, res: Response) => {
       if (backupData.materialAccounts?.length > 0) {
         await manager.getRepository(MaterialAccount).save(backupData.materialAccounts);
       }
-      if (backupData.tokens?.length) {
+      if (backupData.tokens?.length > 0) {
         await manager.getRepository(Token).save(backupData.tokens);
       }
       if (backupData.paymentHistory?.length > 0) {
         await manager.getRepository(PaymentHistory).save(backupData.paymentHistory);
       }
+
+      // 4. Re-enable foreign key checks
+      await manager.query(`SET session_replication_role = 'origin';`);
     });
 
     return res.json({ msg: "✅ Database successfully restored from Google Drive!" });
-  } catch (err) {
-    console.error("Restore Error:", err);
-    return res.status(500).json({ msg: "Server error during restore" });
+  } catch (err: any) {
+    console.error("Restore Error Details:", err.message || err);
+    return res.status(500).json({ msg: "Server error during restore", error: err.message });
   }
 };
