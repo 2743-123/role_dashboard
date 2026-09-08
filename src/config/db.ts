@@ -7,6 +7,7 @@ import { MaterialAccount } from "../models/materialaccount";
 import { Token } from "../models/Token";
 import { Transaction } from "../models/Transaction";
 import { BedashMessage } from "../models/bedashMessage";
+import { PaymentHistory } from "../models/PaymentHistory";
 dotenv.config();
 
 export const AppDataSource = new DataSource({
@@ -28,6 +29,7 @@ export const AppDataSource = new DataSource({
     Token,
     Transaction,
     BedashMessage,
+    PaymentHistory,
   ],
 });
 console.log("URL", process.env.DATABASE_URL);

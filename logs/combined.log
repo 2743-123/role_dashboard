@@ -1112,3 +1112,122 @@
 2026-07-25 00:07:73 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
 2026-09-05 12:09:51 [[32minfo[39m]: Login attempt by: temp@gmail.com
 2026-09-05 12:09:89 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 13:09:43 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 13:09:88 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 14:09:56 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 14:09:95 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 14:09:56 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 14:09:96 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 14:09:45 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-05 14:09:43 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-05 14:09:46 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 14:09:31 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 14:09:78 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 14:09:50 [[33mwarn[39m]: Login failed (User not found: temp@gmail.com)
+2026-09-05 14:09:44 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 14:09:55 [[33mwarn[39m]: Login failed (User not found: temp@gmail.com)
+2026-09-05 14:09:61 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 14:09:53 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 14:09:32 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 14:09:19 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 14:09:93 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 14:09:26 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 14:09:68 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 14:09:03 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 14:09:87 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 14:09:23 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 15:09:71 [[32minfo[39m]: Login attempt by: asifandhi25gmail.com
+2026-09-05 15:09:86 [[33mwarn[39m]: Login failed (User not found: asifandhi25gmail.com)
+2026-09-05 15:09:11 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 15:09:59 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 15:09:35 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 15:09:80 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 15:09:07 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 15:09:46 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 15:09:30 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 15:09:69 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 15:09:33 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 15:09:73 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 15:09:79 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 15:09:18 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 15:09:15 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 15:09:50 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 15:09:49 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-05 15:09:89 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-05 15:09:42 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 15:09:79 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-05 15:09:28 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-05 15:09:75 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-05 15:09:39 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-05 15:09:74 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 06:09:24 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 06:09:35 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 06:09:57 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 06:09:86 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 06:09:17 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 06:09:63 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 07:09:08 [[32minfo[39m]: [0mGET /api/payment-history [33m404[0m 5.029 ms - 158[0m
+2026-09-06 07:09:32 [[32minfo[39m]: [0mGET /api/payment-history [33m404[0m 0.658 ms - 158[0m
+2026-09-06 07:09:63 [[32minfo[39m]: [0mGET /api/payment-history [33m404[0m 0.578 ms - 158[0m
+2026-09-06 07:09:04 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 07:09:61 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 10:09:30 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 10:09:31 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 10:09:37 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 10:09:70 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 11:09:17 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 11:09:72 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 13:09:60 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 13:09:06 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 13:09:50 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 13:09:92 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 13:09:79 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 13:09:90 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 14:09:48 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 14:09:87 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 14:09:25 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 14:09:45 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 14:09:72 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 14:09:66 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 14:09:59 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 14:09:97 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 14:09:53 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 14:09:86 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 14:09:46 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 14:09:82 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 14:09:25 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 14:09:66 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 14:09:59 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 14:09:25 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 14:09:62 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 14:09:07 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 14:09:00 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 14:09:32 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 15:09:10 [[32minfo[39m]: Login attempt by: asifandhi0@gmail.com
+2026-09-06 15:09:45 [[32minfo[39m]: Login success: asifandhi0@gmail.com, role: admin
+2026-09-06 15:09:95 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 15:09:22 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 15:09:17 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:51 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:95 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 15:09:46 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 15:09:22 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:58 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:06 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:37 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:92 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:39 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:21 [[32minfo[39m]: Login attempt by: temp@gmail.com
+2026-09-06 15:09:58 [[32minfo[39m]: Login success: temp@gmail.com, role: admin
+2026-09-06 15:09:38 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:73 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:57 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:92 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:30 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:14 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:17 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:04 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 15:09:42 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 15:09:47 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin
+2026-09-06 16:09:27 [[32minfo[39m]: Login attempt by: asifandhi25@gmail.com
+2026-09-06 16:09:11 [[32minfo[39m]: Login success: asifandhi25@gmail.com, role: superadmin

@@ -10,6 +10,7 @@ import token from "./routes/Token";
 import morgan from "morgan";
 import { logger } from "./config/logger";
 import dotenv from "dotenv";
+import paymentRoutes from "./routes/paymentRoutes";
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use("/api/users", userroutes);
 app.use("/api/balance", addBalance);
 app.use("/api/token", token);
 app.use("/api/message", BedashMessage);
+app.use("/api/payment-history", paymentRoutes);
 
 // Logging
 app.use(

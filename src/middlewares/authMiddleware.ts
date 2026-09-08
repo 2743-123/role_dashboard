@@ -47,7 +47,8 @@ export const adminMiddleware = (
   next: NextFunction
 ) => {
   if (req.user?.role !== "admin" && req.user?.role !== "superadmin") {
-    return res.status(403).json({ msg: "Acces denide: admin only" });
+    // 🐛 FIX: Typo corrected
+    return res.status(403).json({ msg: "Access denied: admin only" });
   }
   next();
 };
@@ -57,11 +58,12 @@ export const roleCheckMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
-  const creatorRole = req.user?.role; // login किया हुआ user
-  const { role: newUserRole } = req.body; // जिसको create करना है उसका role
+  const creatorRole = req.user?.role;
+  const { role: newUserRole } = req.body;
 
-  // Admin user बना सकता है (लेकिन admin/superadmin नहीं)
-  if (creatorRole === "admin" && newUserRole && newUserRole !== "user") {
+  // 🐛 FIX: Removed `&& newUserRole` loophole. 
+  // Agar admin body me role nahi bhejta hai, tab bhi use bypass nahi karne dega.
+  if (creatorRole === "admin" && newUserRole !== "user") {
     return res.status(403).json({ message: "Admins can only create users" });
   }
 
@@ -85,39 +87,53 @@ export const roleCheckUpdateDelete = async (
   res: Response,
   next: NextFunction
 ) => {
-  const requesterRole = req.user?.role;
-  const requesterId = req.user?.id;
-  const targetId = parseInt(req.params.id);
+  // 🐛 FIX: Wrapped in try...catch to prevent unhandled promise crashes
+  try {
+    const requesterRole = req.user?.role;
+    const requesterId = req.user?.id;
+    const targetId = parseInt(req.params.id);
 
-  const targetUser = await userRepo.findOne({ where: { id: targetId } });
-  if (!targetUser) {
-    return res.status(404).json({ message: "Target user not found" });
-  }
-
-  // 🟢 RULE 1: Users cannot update/delete anyone (even themselves)
-  if (requesterRole === "user") {
-    return res
-      .status(403)
-      .json({ message: "Users cannot update or delete accounts" });
-  }
-
-  // 🟢 RULE 2: Admin can only update/delete users
-  if (requesterRole === "admin") {
-    if (targetUser.role !== "user") {
-      return res.status(403).json({
-        message:
-          "Admins can only update or delete users (not admins or superadmins)",
-      });
+    const targetUser = await userRepo.findOne({
+      where: { id: targetId },
+      relations: ["creator"] // 👈 Ye line add karein
+    });
+    if (!targetUser) {
+      return res.status(404).json({ message: "Target user not found" });
     }
-    if (requesterId === targetId) {
+
+    // 🟢 RULE 1: Users cannot update/delete anyone (even themselves based on your rule)
+    if (requesterRole === "user") {
       return res
         .status(403)
-        .json({ message: "Admins cannot update or delete themselves" });
+        .json({ message: "Users cannot update or delete accounts" });
     }
+
+    // 🟢 RULE 2: Admin can only update/delete their own created users
+    if (requesterRole === "admin") {
+      if (targetUser.role !== "user") {
+        return res.status(403).json({
+          message: "Admins can only update or delete users (not admins or superadmins)",
+        });
+      }
+      if (requesterId === targetId) {
+        return res
+          .status(403)
+          .json({ message: "Admins cannot update or delete themselves" });
+      }
+      // 🐛 FIX: Admin IDOR Security Check (Admin can't touch other admin's users)
+      if (targetUser.creator?.id !== requesterId) {
+        return res
+          .status(403)
+          .json({ message: "Access Denied: You cannot modify another admin's user" });
+      }
+    }
+
+    // 🟢 RULE 3: SuperAdmin has full power
+    // (no restriction)
+
+    next();
+  } catch (error) {
+    console.error("Middleware DB Error:", error);
+    res.status(500).json({ message: "Server error during authorization check" });
   }
-
-  // 🟢 RULE 3: SuperAdmin has full power
-  // (no restriction)
-
-  next();
 };

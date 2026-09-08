@@ -26,7 +26,7 @@ export class User {
   @Column()
   password!: string;
 
-  @Column({ default: "user" }) // user | admin
+  @Column({ default: "user" }) // user | admin | superadmin
   role!: string;
 
   @Column({ default: true })
@@ -41,26 +41,23 @@ export class User {
   @OneToMany(() => Token, (token) => token.user)
   tokens!: Token[];
 
-  @OneToMany(() => Transaction, (transection) => transection.user)
+  @OneToMany(() => Transaction, (transaction) => transaction.user)
   transactions!: Transaction[];
 
   @OneToMany(() => BedashMessage, (msg) => msg.user)
   bedashMessages!: BedashMessage[];
 
-  @Column({ nullable: true })
-  createdBy?: number; // stores superadmin id
-
+  // ✅ SIRF RELATION RAKHNA HAI (Explicit Column hata diya gaya hai)
   @ManyToOne(() => User, (user) => user.children, {
     nullable: true,
     onDelete: "SET NULL",
   })
-  @JoinColumn({ name: "createdBy" })
+  @JoinColumn({ name: "createdBy" }) // TypeORM automatically database me 'createdBy' integer column bana dega
   creator?: User;
 
   @OneToMany(() => User, (user) => user.creator)
   children!: User[];
 
   @OneToMany(() => BedashMessage, (bedash) => bedash.createdBy)
-createdBedash!: BedashMessage[];
+  createdBedash!: BedashMessage[];
 }
-

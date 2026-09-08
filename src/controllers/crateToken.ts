@@ -5,25 +5,30 @@ import { In } from "typeorm";
 import { MaterialAccount } from "../models/materialaccount";
 import { User } from "../models/User";
 import { Token } from "../models/Token";
+import { PaymentHistory } from "../models/PaymentHistory";
 
 const tokenRepo = AppDataSource.getRepository(Token);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 const userRepo = AppDataSource.getRepository(User);
+const paymentHistoryRepo = AppDataSource.getRepository(PaymentHistory);
 
 export const createToken = async (req: Request, res: Response) => {
   try {
     const { customerName, materialType, userId } = req.body;
 
-    const user = await userRepo.findOne({ where: { id: userId } });
+    // 🐛 FIX: Fetch 'creator' relation
+    const user = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    const adminId = user.role === "user" ? user.createdBy : user.id;
+    // 🐛 FIX: Use creator?.id instead of createdBy
+    const adminId = user.role === "user" ? user.creator?.id : user.id;
 
     const lastToken = await tokenRepo
       .createQueryBuilder("t")
       .leftJoin("t.user", "u")
+      .leftJoin("u.creator", "c") // 🐛 FIX: Join creator for query
       .where("t.customerName = :customerName", { customerName })
-      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", { adminId })
+      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
       .orderBy("t.id", "DESC")
       .getOne();
 
@@ -34,8 +39,8 @@ export const createToken = async (req: Request, res: Response) => {
       materialType,
       user,
       status: "pending",
-      carryForward: prevCarry, // ✅ Maintain ledger balance directly
-      paidAmount: 0, // ✅ New token has 0 actual payment initially
+      carryForward: prevCarry,
+      paidAmount: 0,
       truckNumber: undefined,
       weight: 0,
       commission: 0,
@@ -51,14 +56,135 @@ export const createToken = async (req: Request, res: Response) => {
   }
 };
 
+// export const updateToken = async (req: Request, res: Response) => {
+//   try {
+//     // 🟢 FIX: req.body se totalAmount ko bhi destructure karein
+//     const { tokenId, userId, truckNumber, weight, commission, totalAmount } = req.body;
+//     const currentUser = (req as any).user;
+
+//     const token = await tokenRepo.findOne({
+//       where: { id: tokenId },
+//       relations: ["user", "user.creator"], 
+//     });
+
+//     if (!token) return res.status(404).json({ msg: "Token not found" });
+
+//     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
+//       return res.status(403).json({ msg: "Access denied" });
+//     }
+
+//     if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
+//       return res.status(403).json({ msg: "Access denied: Not your user's token" });
+//     }
+
+//     let targetUser = token.user;
+
+//     if (["admin", "superadmin"].includes(currentUser.role)) {
+//       const newUser = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
+//       if (!newUser) return res.status(404).json({ msg: "Target user not found" });
+//       targetUser = newUser;
+//     }
+
+//     /** Material Account Update */
+//     const account = await accountRepo.findOne({
+//       where: { user: { id: targetUser.id }, materialType: token.materialType },
+//     });
+
+//     if (!account) return res.status(400).json({ msg: "Material account not found" });
+
+//     const oldWeight = Number(token.weight || 0);
+//     const newWeight = Number(weight);
+//     const diff = newWeight - oldWeight;
+
+//     if (diff > 0 && diff > account.remainingTons) {
+//       return res.status(400).json({
+//         msg: `Insufficient balance. Available: ${account.remainingTons}`,
+//       });
+//     }
+
+//     // Apply material differences safely
+//     account.usedTons = Math.max(0, Number(account.usedTons) + diff);
+//     account.remainingTons = Number(account.remainingTons) - diff;
+//     await accountRepo.save(account);
+
+//     /** 🟢 Billing Calculation FIX */
+//     const ratePerTon = 180;
+    
+//     // Agar frontend ne totalAmount bheja hai (Bedash), toh directly usko use karein
+//     // Warna Flyash ka purana default calculation chalega
+//     const finalTotalAmount = totalAmount !== undefined 
+//       ? Number(totalAmount) 
+//       : (newWeight * ratePerTon + Number(commission));
+    
+//     const adminId = targetUser.role === "user" ? targetUser.creator?.id : targetUser.id;
+
+//     /** Update current token basics */
+//     token.user = targetUser;
+//     token.truckNumber = truckNumber;
+//     token.weight = newWeight;
+//     token.commission = Number(commission);
+//     token.ratePerTon = ratePerTon;
+//     token.totalAmount = finalTotalAmount;
+//     await tokenRepo.save(token);
+
+//     // 🔥 RE-CALCULATE LEDGER CHAIN FOR THIS AND ALL NEXT TOKENS
+//     const allRelevantTokens = await tokenRepo
+//       .createQueryBuilder("t")
+//       .leftJoin("t.user", "u")
+//       .leftJoin("u.creator", "c") 
+//       .where("t.customerName = :customerName", { customerName: token.customerName })
+//       .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+//       .andWhere("t.id >= :id", { id: token.id }) 
+//       .orderBy("t.id", "ASC")
+//       .getMany();
+
+//     const prevTokenBeforeCurrent = await tokenRepo
+//       .createQueryBuilder("t")
+//       .leftJoin("t.user", "u")
+//       .leftJoin("u.creator", "c") 
+//       .where("t.customerName = :customerName", { customerName: token.customerName })
+//       .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+//       .andWhere("t.id < :id", { id: token.id })
+//       .orderBy("t.id", "DESC")
+//       .getOne();
+
+//     let runningCarry = prevTokenBeforeCurrent ? Number(prevTokenBeforeCurrent.carryForward || 0) : 0;
+
+//     for (const t of allRelevantTokens) {
+//       const tTotal = Number(t.totalAmount || 0);
+//       const tPaid = Number(t.paidAmount || 0);
+
+//       // ✅ Golden Rule of Ledger
+//       runningCarry = Number((runningCarry + tPaid - tTotal).toFixed(2));
+//       t.carryForward = runningCarry;
+      
+//       if (tTotal > 0) {
+//         t.status = runningCarry >= 0 ? "completed" : "updated";
+//       }
+//     }
+
+//     if (allRelevantTokens.length > 0) {
+//       await tokenRepo.save(allRelevantTokens);
+//     }
+
+//     return res.json({
+//       msg: "✅ Token updated with perfectly balanced ledger chain",
+//       data: token,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ msg: "Server error" });
+//   }
+// };
 export const updateToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, userId, truckNumber, weight, commission } = req.body;
+    // 🟢 FIX: manualDate ko req.body se receive karein
+    const { tokenId, userId, truckNumber, weight, commission, totalAmount, manualDate } = req.body;
     const currentUser = (req as any).user;
 
     const token = await tokenRepo.findOne({
       where: { id: tokenId },
-      relations: ["user"],
+      relations: ["user", "user.creator"], 
     });
 
     if (!token) return res.status(404).json({ msg: "Token not found" });
@@ -67,10 +193,14 @@ export const updateToken = async (req: Request, res: Response) => {
       return res.status(403).json({ msg: "Access denied" });
     }
 
+    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
+      return res.status(403).json({ msg: "Access denied: Not your user's token" });
+    }
+
     let targetUser = token.user;
 
     if (["admin", "superadmin"].includes(currentUser.role)) {
-      const newUser = await userRepo.findOne({ where: { id: userId } });
+      const newUser = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
       if (!newUser) return res.status(404).json({ msg: "Target user not found" });
       targetUser = newUser;
     }
@@ -97,10 +227,15 @@ export const updateToken = async (req: Request, res: Response) => {
     account.remainingTons = Number(account.remainingTons) - diff;
     await accountRepo.save(account);
 
-    /** Billing Calculation */
+    /** 🟢 Billing Calculation FIX */
     const ratePerTon = 180;
-    const totalAmount = newWeight * ratePerTon + Number(commission);
-    const adminId = targetUser.role === "user" ? targetUser.createdBy : targetUser.id;
+    
+    // Agar frontend ne totalAmount bheja hai (Bedash), toh directly usko use karein
+    const finalTotalAmount = totalAmount !== undefined 
+      ? Number(totalAmount) 
+      : (newWeight * ratePerTon + Number(commission));
+    
+    const adminId = targetUser.role === "user" ? targetUser.creator?.id : targetUser.id;
 
     /** Update current token basics */
     token.user = targetUser;
@@ -108,24 +243,32 @@ export const updateToken = async (req: Request, res: Response) => {
     token.weight = newWeight;
     token.commission = Number(commission);
     token.ratePerTon = ratePerTon;
-    token.totalAmount = totalAmount;
+    token.totalAmount = finalTotalAmount;
+    
+    // 🟢 FIX: Agar manual date aayi hai, toh usko update karein
+if (manualDate) {
+      token.updatedAt = new Date(manualDate); 
+    }
+    
     await tokenRepo.save(token);
 
     // 🔥 RE-CALCULATE LEDGER CHAIN FOR THIS AND ALL NEXT TOKENS
     const allRelevantTokens = await tokenRepo
       .createQueryBuilder("t")
       .leftJoin("t.user", "u")
+      .leftJoin("u.creator", "c") 
       .where("t.customerName = :customerName", { customerName: token.customerName })
-      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", { adminId })
-      .andWhere("t.id >= :id", { id: token.id }) // Include current token
+      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+      .andWhere("t.id >= :id", { id: token.id }) 
       .orderBy("t.id", "ASC")
       .getMany();
 
     const prevTokenBeforeCurrent = await tokenRepo
       .createQueryBuilder("t")
       .leftJoin("t.user", "u")
+      .leftJoin("u.creator", "c") 
       .where("t.customerName = :customerName", { customerName: token.customerName })
-      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", { adminId })
+      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
       .andWhere("t.id < :id", { id: token.id })
       .orderBy("t.id", "DESC")
       .getOne();
@@ -136,11 +279,10 @@ export const updateToken = async (req: Request, res: Response) => {
       const tTotal = Number(t.totalAmount || 0);
       const tPaid = Number(t.paidAmount || 0);
 
-      // ✅ Golden Rule of Ledger: Carry = Prev Carry + Paid - Total
+      // ✅ Golden Rule of Ledger
       runningCarry = Number((runningCarry + tPaid - tTotal).toFixed(2));
       t.carryForward = runningCarry;
       
-      // Update status dynamically based on dues
       if (tTotal > 0) {
         t.status = runningCarry >= 0 ? "completed" : "updated";
       }
@@ -159,7 +301,6 @@ export const updateToken = async (req: Request, res: Response) => {
     return res.status(500).json({ msg: "Server error" });
   }
 };
-
 export const confirmToken = async (req: Request, res: Response) => {
   try {
     const { tokenId, paidAmount } = req.body;
@@ -167,7 +308,7 @@ export const confirmToken = async (req: Request, res: Response) => {
 
     const token = await tokenRepo.findOne({
       where: { id: tokenId },
-      relations: ["user"],
+      relations: ["user", "user.creator"], 
     });
 
     if (!token) return res.status(404).json({ msg: "Token not found" });
@@ -175,20 +316,25 @@ export const confirmToken = async (req: Request, res: Response) => {
     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
       return res.status(403).json({ msg: "Access denied" });
     }
+    
+    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
+      return res.status(403).json({ msg: "Access denied: Not your user's token" });
+    }
 
-    const adminId = token.user.role === "user" ? token.user.createdBy : token.user.id;
+    const adminId = token.user.role === "user" ? token.user.creator?.id : token.user.id;
 
     const tokens = await tokenRepo
       .createQueryBuilder("t")
       .leftJoinAndSelect("t.user", "u")
+      .leftJoin("u.creator", "c") 
       .where("t.customerName = :customerName", { customerName: token.customerName })
-      .andWhere("(u.createdBy = :adminId OR u.id = :adminId)", { adminId })
+      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
       .orderBy("t.id", "ASC")
       .getMany();
 
     let remainingPayment = Number(paidAmount);
+    let paymentDetails = []; // 📝 Yahan saare tokens ka detailed record banega
 
-    // 1️⃣ Distribute Payment to unpaid tokens first
     for (const t of tokens) {
       if (remainingPayment <= 0) break;
       const total = Number(t.totalAmount || 0);
@@ -202,27 +348,38 @@ export const confirmToken = async (req: Request, res: Response) => {
         t.paidAmount = alreadyPaid + payNow;
         t.confirmedAt = new Date();
         remainingPayment -= payNow;
+
+        // 📝 Detail record with FULL calculation
+     paymentDetails.push({
+          tokenId: t.id,
+          userName: t.user.name,
+          customerName: t.customerName,
+          truckNumber: t.truckNumber || "N/A",
+          materialType: t.materialType, // 👈 YE LINE ADD KARNI HAI
+          weight: t.weight,
+          ratePerTon: t.ratePerTon || 180,
+          commission: t.commission || 0,
+          totalAmount: total,
+          paidThisTime: payNow,
+          dueNow: total - t.paidAmount 
+        });
       }
     }
 
-    // 2️⃣ If extra payment remains (Advance), add it to the latest token
     if (remainingPayment > 0 && tokens.length > 0) {
       const lastToken = tokens[tokens.length - 1];
       lastToken.paidAmount = Number(lastToken.paidAmount || 0) + remainingPayment;
       lastToken.confirmedAt = new Date();
     }
 
-    // 3️⃣ Recalculate Ledger Chain for ALL tokens to fix carryForward automatically
     let runningCarry = 0;
     for (const t of tokens) {
       const tTotal = Number(t.totalAmount || 0);
       const tPaid = Number(t.paidAmount || 0);
 
-      // Chaining logic
       runningCarry = Number((runningCarry + tPaid - tTotal).toFixed(2));
       t.carryForward = runningCarry;
 
-      // Status check
       if (tTotal > 0) {
         t.status = runningCarry >= 0 ? "completed" : "updated";
       }
@@ -230,8 +387,21 @@ export const confirmToken = async (req: Request, res: Response) => {
 
     await tokenRepo.save(tokens);
 
+    // ✅ SAVE TO PAYMENT HISTORY (Poori history detailed mode me)
+    const history = paymentHistoryRepo.create({
+      user: token.user,
+      admin: { id: currentUser.id } as any,
+      type: "token_payment",
+      amount: paidAmount, 
+      details: {
+        confirmedTokens: paymentDetails, 
+        advanceLeft: remainingPayment > 0 ? remainingPayment : 0 
+      }
+    });
+    await paymentHistoryRepo.save(history);
+
     return res.json({
-      msg: "✅ Ledger perfectly balanced and payment distributed",
+      msg: "✅ Ledger balanced and payment recorded in History",
       customerName: token.customerName,
     });
   } catch (err) {
@@ -243,13 +413,25 @@ export const confirmToken = async (req: Request, res: Response) => {
 export const getAllTokens = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const currentUser = req.user!;
 
-    if (req.user!.role === "user" && req.user!.id !== Number(userId)) {
+    const targetUser = await userRepo.findOne({
+      where: { id: Number(userId) },
+      relations: ["creator"]
+    });
+
+    if (!targetUser) return res.status(404).json({ msg: "User not found" });
+
+    // 🔐 Security FIX: Admin IDOR protection
+    if (currentUser.role === "user" && currentUser.id !== targetUser.id) {
       return res.status(403).json({ msg: "Access denied" });
+    }
+    if (currentUser.role === "admin" && targetUser.creator?.id !== currentUser.id) {
+      return res.status(403).json({ msg: "Access denied: Not your user" });
     }
 
     const tokens = await tokenRepo.find({
-      where: { user: { id: Number(userId) } },
+      where: { user: { id: targetUser.id } },
       relations: ["user"],
       order: { id: "DESC" },
     });
@@ -274,12 +456,18 @@ export const getAdminAllUserTokens = async (req: Request, res: Response) => {
     if (currentUser.role === "superadmin") {
       users = await userRepo.find({ where: { role: "user" } });
     } else {
+      // 🐛 FIX: Use creator object relation
       users = await userRepo.find({
-        where: { role: "user", createdBy: currentUser.id },
+        where: { role: "user", creator: { id: currentUser.id } },
       });
     }
 
     const userIds = users.map((u) => u.id);
+
+    // Ensure we don't pass an empty array to In() as it throws an error
+    if (userIds.length === 0) {
+      return res.json({ msg: "✅ Admin token report fetched", totalTokens: 0, data: [] });
+    }
 
     const tokens = await tokenRepo.find({
       where: { user: { id: In(userIds) } },
@@ -330,13 +518,18 @@ export const deleteToken = async (req: Request, res: Response) => {
 
     const token = await tokenRepo.findOne({
       where: { id: Number(tokenId) },
-      relations: ["user"],
+      relations: ["user", "user.creator"], // 🐛 FIX
     });
 
     if (!token) return res.status(404).json({ msg: "Token not found" });
 
     if (currentUser.role === "user" && currentUser.id !== token.user.id) {
       return res.status(403).json({ msg: "Access denied" });
+    }
+
+    // 🔐 Security FIX
+    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
+      return res.status(403).json({ msg: "Access denied: Not your user's token" });
     }
 
     if (token.status !== "pending") {
