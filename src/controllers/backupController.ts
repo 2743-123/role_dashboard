@@ -5,8 +5,8 @@ import { User } from "../models/User";
 import { Token } from "../models/Token";
 import { MaterialAccount } from "../models/materialaccount";
 import { PaymentHistory } from "../models/PaymentHistory";
-import stream from "stream";
 import { Transaction } from "../models/Transaction";
+import stream from "stream";
 
 // 🔹 BACKUP EXPORT TO GOOGLE DRIVE
 export const exportBackup = async (req: Request, res: Response) => {
@@ -19,12 +19,13 @@ export const exportBackup = async (req: Request, res: Response) => {
     oauth2Client.setCredentials({ access_token: googleToken });
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-    // Fetch all database data
+    // Fetch all database data (transactions ko bhi include kar liya hai)
     const backupData = {
       users: await AppDataSource.getRepository(User).find({ relations: ["creator"] }),
       tokens: await AppDataSource.getRepository(Token).find({ relations: ["user"] }),
       materialAccounts: await AppDataSource.getRepository(MaterialAccount).find({ relations: ["user"] }),
       paymentHistory: await AppDataSource.getRepository(PaymentHistory).find({ relations: ["user", "admin"] }),
+      transactions: await AppDataSource.getRepository(Transaction).find(),
     };
 
     // Convert data to JSON stream
@@ -34,7 +35,7 @@ export const exportBackup = async (req: Request, res: Response) => {
     const fileMetadata = { name: "bricks_admin_backup.json", mimeType: "application/json" };
     const media = { mimeType: "application/json", body: bufferStream };
 
-    // Upload to Google Drive
+    // Upload to Google Drive (Agar purani file hai toh overwrite/update ya nayi create karega)
     await drive.files.create({
       requestBody: fileMetadata,
       media: media,
@@ -82,23 +83,31 @@ export const importBackup = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "Invalid backup file format" });
     }
 
-    // ⭐ Restore Data to Database (Clear existing and insert backup)
-    await AppDataSource.transaction(async (transactionalEntityManager) => {
-      // CLEAR TABLES (Reverse order due to foreign keys)
-      await transactionalEntityManager.clear(PaymentHistory);
-      await transactionalEntityManager.clear(Token);
-      await transactionalEntityManager.clear(MaterialAccount);
-      await transactionalEntityManager.clear(Transaction); // Assuming you have a Balance entity, if not, remove this line
-      // Optional: Don't clear users if you want to keep admin accounts safe, 
-      // but if you want 100% clone, you can clear and restore them too.
-      // await transactionalEntityManager.clear(User); 
+    // ⭐ Restore Data to Database using PostgreSQL CASCADE Truncate
+    await AppDataSource.transaction(async (manager) => {
+      // Foreign key constraints bypass karne ke liye TRUNCATE CASCADE use karein
+      await manager.query(`TRUNCATE TABLE "payment_history" RESTART IDENTITY CASCADE;`);
+      await manager.query(`TRUNCATE TABLE "material_account" RESTART IDENTITY CASCADE;`);
+      await manager.query(`TRUNCATE TABLE "token" RESTART IDENTITY CASCADE;`);
+      await manager.query(`TRUNCATE TABLE "transaction" RESTART IDENTITY CASCADE;`);
+      await manager.query(`TRUNCATE TABLE "user" RESTART IDENTITY CASCADE;`);
 
-      // RESTORE DATA
-      if (backupData.transactions.length > 0) await transactionalEntityManager.save(Transaction, backupData.transactions);
-      if (backupData.users.length > 0) await transactionalEntityManager.save(User, backupData.users);
-      if (backupData.materialAccounts.length > 0) await transactionalEntityManager.save(MaterialAccount, backupData.materialAccounts);
-      if (backupData.tokens.length > 0) await transactionalEntityManager.save(Token, backupData.tokens);
-      if (backupData.paymentHistory.length > 0) await transactionalEntityManager.save(PaymentHistory, backupData.paymentHistory);
+      // RESTORE DATA IN PROPER ORDER
+      if (backupData.users?.length > 0) {
+        await manager.getRepository(User).save(backupData.users);
+      }
+      if (backupData.transactions?.length > 0) {
+        await manager.getRepository(Transaction).save(backupData.transactions);
+      }
+      if (backupData.materialAccounts?.length > 0) {
+        await manager.getRepository(MaterialAccount).save(backupData.materialAccounts);
+      }
+      if (backupData.tokens?.length) {
+        await manager.getRepository(Token).save(backupData.tokens);
+      }
+      if (backupData.paymentHistory?.length > 0) {
+        await manager.getRepository(PaymentHistory).save(backupData.paymentHistory);
+      }
     });
 
     return res.json({ msg: "✅ Database successfully restored from Google Drive!" });
