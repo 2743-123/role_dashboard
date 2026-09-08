@@ -94,7 +94,7 @@ export const importBackup = async (req: Request, res: Response) => {
       // await transactionalEntityManager.clear(User); 
 
       // RESTORE DATA
-      if (backupData.Transactions.length > 0) await transactionalEntityManager.save(Transaction, backupData.Transactions);
+      if (backupData.transactions.length > 0) await transactionalEntityManager.save(Transaction, backupData.transactions);
       if (backupData.users.length > 0) await transactionalEntityManager.save(User, backupData.users);
       if (backupData.materialAccounts.length > 0) await transactionalEntityManager.save(MaterialAccount, backupData.materialAccounts);
       if (backupData.tokens.length > 0) await transactionalEntityManager.save(Token, backupData.tokens);
