@@ -6,6 +6,7 @@ import { Token } from "../models/Token";
 import { MaterialAccount } from "../models/materialaccount";
 import { PaymentHistory } from "../models/PaymentHistory";
 import stream from "stream";
+import { Transaction } from "../models/Transaction";
 
 // 🔹 BACKUP EXPORT TO GOOGLE DRIVE
 export const exportBackup = async (req: Request, res: Response) => {
@@ -87,11 +88,13 @@ export const importBackup = async (req: Request, res: Response) => {
       await transactionalEntityManager.clear(PaymentHistory);
       await transactionalEntityManager.clear(Token);
       await transactionalEntityManager.clear(MaterialAccount);
+      await transactionalEntityManager.clear(Transaction); // Assuming you have a Balance entity, if not, remove this line
       // Optional: Don't clear users if you want to keep admin accounts safe, 
       // but if you want 100% clone, you can clear and restore them too.
       // await transactionalEntityManager.clear(User); 
 
       // RESTORE DATA
+      if (backupData.Transactions.length > 0) await transactionalEntityManager.save(Transaction, backupData.Transactions);
       if (backupData.users.length > 0) await transactionalEntityManager.save(User, backupData.users);
       if (backupData.materialAccounts.length > 0) await transactionalEntityManager.save(MaterialAccount, backupData.materialAccounts);
       if (backupData.tokens.length > 0) await transactionalEntityManager.save(Token, backupData.tokens);
