@@ -17,6 +17,62 @@ export interface AuthenticatedRequest extends Request {
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 const userRepo = AppDataSource.getRepository(User);
 
+// export const register = async (req: Request, res: Response) => {
+//   try {
+//     const currentUser = (req as any).user;
+    
+//     // 🐛 FIX 3: Check if currentUser exists (Protects against unauthenticated access)
+//     if (!currentUser) {
+//       return res.status(401).json({ msg: "Unauthorized" });
+//     }
+
+//     const { name, email, password, role } = req.body;
+
+//     // Admin sirf "user" bana sakta hai
+//     if (currentUser.role === "admin" && role !== "user") {
+//       return res.status(403).json({ msg: "Admin can only create users" });
+//     }
+
+//     // Normal user kisi ko create nahi kar sakta
+//     if (currentUser.role === "user") {
+//       return res.status(403).json({ msg: "Access denied" });
+//     }
+
+//     // 🐛 FIX 2: Check for existing user to prevent DB constraint errors
+//     const existingUser = await userRepo.findOne({ where: { email } });
+//     if (existingUser) {
+//       return res.status(400).json({ msg: "Email already in use" });
+//     }
+
+//     // Password hash
+//    // Password hash
+//     const hashedPassword = await bcrypt.hash(password, 10);
+
+//     // 1. User create karein (isme createdBy mat daalein)
+//     const newUser = userRepo.create({
+//       name,
+//       email,
+//       password: hashedPassword,
+//       role,
+//       isActive: true,
+//     });
+
+//     // 🐛 THE MAGIC FIX: Relation explicitly set karein
+//     // TypeORM ab is id ko khud 'createdBy' column me convert karke DB me save kar dega
+//     newUser.creator = { id: currentUser.id } as any; 
+
+//     // 2. Ab save karein
+//     await userRepo.save(newUser);
+
+//     // Safety: Remove password from response
+//     const { password: _, ...userWithoutPassword } = newUser;
+    
+//     res.status(201).json({ msg: "User created successfully", user: userWithoutPassword });
+//   } catch (error) {
+//     console.error("Error creating user:", error);
+//     res.status(500).json({ msg: "Error creating user" });
+//   }
+// };
 export const register = async (req: Request, res: Response) => {
   try {
     const currentUser = (req as any).user;
@@ -26,7 +82,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(401).json({ msg: "Unauthorized" });
     }
 
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, phone, whatsappInstanceId, whatsappToken } = req.body;
 
     // Admin sirf "user" bana sakta hai
     if (currentUser.role === "admin" && role !== "user") {
@@ -45,20 +101,21 @@ export const register = async (req: Request, res: Response) => {
     }
 
     // Password hash
-   // Password hash
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 1. User create karein (isme createdBy mat daalein)
+    // 1. User create karein (Naye fields bhi include kiye gaye hain)
     const newUser = userRepo.create({
       name,
       email,
       password: hashedPassword,
       role,
       isActive: true,
+      phone,
+      whatsappInstanceId,
+      whatsappToken,
     });
 
     // 🐛 THE MAGIC FIX: Relation explicitly set karein
-    // TypeORM ab is id ko khud 'createdBy' column me convert karke DB me save kar dega
     newUser.creator = { id: currentUser.id } as any; 
 
     // 2. Ab save karein
@@ -73,7 +130,6 @@ export const register = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Error creating user" });
   }
 };
-
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;

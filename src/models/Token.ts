@@ -65,6 +65,9 @@ export class Token {
   @Column({ type: "timestamp", nullable: true })
   confirmedAt!: Date | null;
 
+  @Column({ type: "varchar", length: 15, nullable: true })
+customerPhone!: string;
+
   @ManyToOne(() => User, (user) => user.tokens, {
     onDelete: "CASCADE", // 👈 Deletes token if user is deleted
     onUpdate: "CASCADE",

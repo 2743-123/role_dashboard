@@ -7,6 +7,7 @@ import userroutes from "./routes/user";
 import addBalance from "./routes/addBalance";
 import BedashMessage from "./routes/bedashRoutes";
 import token from "./routes/Token";
+import webhookRoutes from "./routes/webhookRoutes"; // 👈 1. Yahan import karein (apni file ke path ke hisab se check kar lein)
 import morgan from "morgan";
 import { logger } from "./config/logger";
 import dotenv from "dotenv";
@@ -28,6 +29,7 @@ app.use(
 app.options(/.*/,cors());
 // parse JSON
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // 👈 Form data handle karne ke liye ye bhi add kar dein
 
 const PORT = process.env.PORT || 5000;
 
@@ -39,6 +41,7 @@ app.use("/api/token", token);
 app.use("/api/message", BedashMessage);
 app.use("/api/payment-history", paymentRoutes);
 app.use("/api/backup", backupRoutes);
+app.use("/api", webhookRoutes); // 👈 2. Yahan route register karein (Isse URL ban jayega /api/whatsapp/webhook)
 
 // Logging
 app.use(

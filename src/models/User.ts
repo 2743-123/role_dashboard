@@ -26,6 +26,10 @@ export class User {
   @Column()
   password!: string;
 
+  // ⭐ NAYA COLUMN: Dealer/User ka WhatsApp number save karne ke liye
+  @Column({ type: "varchar", length: 15, nullable: true })
+  phone!: string;
+
   @Column({ default: "user" }) // user | admin | superadmin
   role!: string;
 
@@ -34,6 +38,12 @@ export class User {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @Column({ type: "varchar", nullable: true })
+  whatsappInstanceId!: string;
+
+  @Column({ type: "varchar", nullable: true })
+  whatsappToken!: string;
 
   @OneToMany(() => MaterialAccount, (account) => account.user)
   accounts!: MaterialAccount[];
@@ -52,7 +62,7 @@ export class User {
     nullable: true,
     onDelete: "SET NULL",
   })
-  @JoinColumn({ name: "createdBy" }) // TypeORM automatically database me 'createdBy' integer column bana dega
+  @JoinColumn({ name: "createdBy" }) 
   creator?: User;
 
   @OneToMany(() => User, (user) => user.creator)

@@ -5,6 +5,7 @@ import { MaterialAccount } from "../models/materialaccount";
 import { Transaction } from "../models/Transaction";
 import { In } from "typeorm";
 import { PaymentHistory } from "../models/PaymentHistory";
+import { sendWhatsAppReceipt } from "../services/whatsappService";
 
 const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
@@ -30,7 +31,6 @@ export const addBalance = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "❌ Amounts cannot be negative" });
     }
 
-    // 🐛 FIX: Fetch 'creator' relation
     const user = await userRepo.findOne({
       where: { id: userId },
       relations: ["creator"]
@@ -42,7 +42,6 @@ export const addBalance = async (req: Request, res: Response) => {
       return res.status(403).json({ msg: "❌ You don't have permission to add balance" });
     }
 
-    // 🐛 FIX: Check creator?.id instead of createdBy
     if (currentUser.role === "admin" && user.creator?.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ Access Denied: Not your user" });
     }
@@ -91,8 +90,6 @@ export const addBalance = async (req: Request, res: Response) => {
     });
 
     await transactionRepo.save(transaction);
-    // Existing code...
-    await transactionRepo.save(transaction);
 
     // ✅ SAVE TO PAYMENT HISTORY
     const history = paymentHistoryRepo.create({
@@ -111,8 +108,37 @@ export const addBalance = async (req: Request, res: Response) => {
     });
     await paymentHistoryRepo.save(history);
 
-    return res.json({ msg: "✅ Balance added successfully", data: transaction });
+    // ⭐ WHATSAPP NOTIFICATION FOR BALANCE ADDITION ⭐
+  try {
+      const adminUser = currentUser.role === "admin" 
+        ? await userRepo.findOne({ where: { id: currentUser.id } }) 
+        : user.creator;
 
+      const adminPhone = (adminUser as any)?.phone || (adminUser as any)?.mobile;
+      const waInstance = (adminUser as any)?.whatsappInstanceId;
+      const waToken = (adminUser as any)?.whatsappToken;
+
+      if (adminPhone) {
+        const balanceMsg = `💰 *New Balance Added Successfully!* 💰\n\n` +
+          `👤 User/Dealer: *${user.name}*\n\n` +
+          `📦 *Flyash:* \n` +
+          `• Added: ₹${flyashAmount} (${flyashTons.toFixed(3)} Tons)\n` +
+          `• Remaining: ${(flyashAccount.remainingTons - flyashTons).toFixed(3)} + ${flyashTons.toFixed(3)} = *${flyashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
+          `📦 *Bedash:* \n` +
+          `• Added: ₹${bedashAmount} (${bedashTons.toFixed(3)} Tons)\n` +
+          `• Remaining: ${(bedashAccount.remainingTons - bedashTons).toFixed(3)} + ${bedashTons.toFixed(3)} = *${bedashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
+          `💵 Total Amount Added: ₹${flyashAmount + bedashAmount}\n` +
+          `💳 Payment Mode: ${paymentMode}\n` +
+          `${paymentMode === "online" ? `🏦 Bank Name: ${bankName}\n👤 Account Holder: ${accountHolder}\n🔢 Ref No: ${referenceNumber}\n` : ""}` +
+          `\n- Bricks Admin System`;
+
+        await sendWhatsAppReceipt(adminPhone, balanceMsg, waInstance, waToken);
+      }
+    } catch (waError) {
+      console.error("WhatsApp notification failed:", waError);
+    }
+
+    return res.json({ msg: "✅ Balance added successfully", data: transaction });
 
   } catch (error) {
     console.error("Error in addBalance:", error);
@@ -125,7 +151,6 @@ export const getBalance = async (req: Request, res: Response) => {
     const { userId } = req.params;
     const currentUser = req.user!;
 
-    // 🐛 FIX: Fetch 'creator' relation
     const user = await userRepo.findOne({
       where: { id: Number(userId) },
       relations: ["creator"]
@@ -137,7 +162,6 @@ export const getBalance = async (req: Request, res: Response) => {
       return res.status(403).json({ msg: "❌ Access Denied" });
     }
 
-    // 🐛 FIX: Check creator?.id
     if (currentUser.role === "admin" && user.creator?.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ Access Denied: Not your user" });
     }
@@ -201,7 +225,6 @@ export const getAllUsersBalanceReport = async (req: Request, res: Response) => {
     if (currentUser.role === "superadmin") {
       users = await userRepo.find({ where: { role: "user" }, order: { name: "ASC" } });
     } else if (currentUser.role === "admin") {
-      // 🐛 FIX: Query using relation 'creator: { id: currentUser.id }'
       users = await userRepo.find({
         where: { role: "user", creator: { id: currentUser.id } },
         order: { name: "ASC" },
@@ -210,7 +233,6 @@ export const getAllUsersBalanceReport = async (req: Request, res: Response) => {
 
     const userIds = users.map(u => u.id);
 
-    // 🐛 FIX: Prevent DB crash if no users are found (In() cannot be empty)
     if (userIds.length === 0) {
       return res.json({ msg: "✅ Admin balance report fetched", totalUsers: 0, data: [] });
     }
@@ -274,7 +296,6 @@ export const editBalance = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "❌ Amounts cannot be negative" });
     }
 
-    // 🐛 FIX: Fetch nested relation 'user.creator'
     const transaction = await transactionRepo.findOne({
       where: { id: transactionId },
       relations: ["user", "user.creator"],
@@ -284,7 +305,6 @@ export const editBalance = async (req: Request, res: Response) => {
 
     if (currentUser.role === "user") return res.status(403).json({ msg: "❌ Access denied" });
 
-    // 🐛 FIX: Check nested creator.id
     if (currentUser.role === "admin" && transaction.user.creator?.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ Access Denied: Not your user's transaction" });
     }
@@ -331,7 +351,6 @@ export const deleteBalance = async (req: Request, res: Response) => {
     const { transactionId } = req.params;
     const currentUser = req.user!;
 
-    // 🐛 FIX: Fetch nested relation 'user.creator'
     const transaction = await transactionRepo.findOne({
       where: { id: Number(transactionId) },
       relations: ["user", "user.creator"],
@@ -341,7 +360,6 @@ export const deleteBalance = async (req: Request, res: Response) => {
 
     if (currentUser.role === "user") return res.status(403).json({ msg: "❌ Access denied" });
 
-    // 🐛 FIX: Check nested creator.id
     if (currentUser.role === "admin" && transaction.user.creator?.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ Access Denied: Not your user's transaction" });
     }

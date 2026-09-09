@@ -6,6 +6,7 @@ import {
   deleteToken,
   getAdminAllUserTokens,
   getAllTokens,
+  sendUserReportToWhatsApp,
   updateToken,
 } from "../controllers/crateToken";
 
@@ -17,5 +18,7 @@ router.put("/confirm", authMiddleWare, confirmToken);
 router.get("/all/:userId", authMiddleWare, getAllTokens);
 router.get("/all", authMiddleWare, getAdminAllUserTokens);
 router.delete("/:tokenId", authMiddleWare, deleteToken);
+
+router.post("/send-user-report", authMiddleWare, sendUserReportToWhatsApp);
 
 export default router;

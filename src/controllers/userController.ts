@@ -68,7 +68,7 @@ export const getUser = async (req: Request, res: Response) => {
 export const updateuser: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, password, role, isActive } = req.body;
+    const { name, email, password, role, isActive, phone, whatsappInstanceId, whatsappToken } = req.body;
     const currentUser = req.user!;
 
     // ✅ FIX: Fetch 'creator' relation
@@ -108,6 +108,11 @@ export const updateuser: RequestHandler = async (req, res) => {
     if (role && currentUser.role === "superadmin") user.role = role;
     if (typeof isActive === "boolean") user.isActive = isActive;
 
+    // ⭐ Naye fields ko update karne ke liye check aur assign karein
+    if (phone !== undefined) user.phone = phone;
+    if (whatsappInstanceId !== undefined) user.whatsappInstanceId = whatsappInstanceId;
+    if (whatsappToken !== undefined) user.whatsappToken = whatsappToken;
+
     await userRepo.save(user);
 
     return res.status(200).json({ message: "User update successful", user });
@@ -116,7 +121,6 @@ export const updateuser: RequestHandler = async (req, res) => {
     return res.status(500).json({ message: "Error updating user", error });
   }
 };
-
 export const deleteUser: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;

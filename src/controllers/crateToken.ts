@@ -6,6 +6,8 @@ import { MaterialAccount } from "../models/materialaccount";
 import { User } from "../models/User";
 import { Token } from "../models/Token";
 import { PaymentHistory } from "../models/PaymentHistory";
+import { sendWhatsAppReceipt } from "../services/whatsappService";
+import { generateAndSendUserReportPDF } from "../services/whatappSendServices";
 
 const tokenRepo = AppDataSource.getRepository(Token);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
@@ -14,12 +16,14 @@ const paymentHistoryRepo = AppDataSource.getRepository(PaymentHistory);
 
 export const createToken = async (req: Request, res: Response) => {
   try {
-    const { customerName, materialType, userId } = req.body;
+    const { customerName, customerPhone, materialType, userId } = req.body;
 
     const user = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    const adminId = user.role === "user" ? user.creator?.id : user.id;
+    // ⭐ Admin user ko identify karein taaki uske credentials nikal sakein
+    const adminUser = user.role === "user" ? user.creator : user;
+    const adminId = adminUser?.id;
 
     const lastToken = await tokenRepo
       .createQueryBuilder("t")
@@ -34,6 +38,7 @@ export const createToken = async (req: Request, res: Response) => {
 
     const token = tokenRepo.create({
       customerName,
+      customerPhone,
       materialType,
       user,
       status: "pending",
@@ -47,13 +52,29 @@ export const createToken = async (req: Request, res: Response) => {
 
     await tokenRepo.save(token);
 
+    // Fetch actual Remaining Tons from Material Account
+    const account = await accountRepo.findOne({
+      where: { user: { id: user.id }, materialType: token.materialType },
+    });
+    const remainingBalance = account ? Number(account.remainingTons).toFixed(2) : "0.00";
+
+    // ⭐ Admin ke WhatsApp credentials extract karein
+    const waInstance = (adminUser as any)?.whatsappInstanceId;
+    const waToken = (adminUser as any)?.whatsappToken;
+
+    if (token.customerPhone) {
+      const message = `Hello *${token.customerName}*,\n\nYour Token has been successfully generated! 🎉\n\n📦 Material: ${token.materialType}\n👤 Issued By: *${user.name}*\n🔄 Carry Forward: ₹${token.carryForward}\n⚖️ Remaining Ton: ${remainingBalance} Tons\n⏳ Status: Pending\n\nThank you for doing business with us! - Bricks Admin`;
+
+      // ⭐ Message ke sath Admin ke instance aur token bhejein
+      sendWhatsAppReceipt(token.customerPhone, message, waInstance, waToken);
+    }
+    
     return res.json({ msg: "✅ Token created", data: token });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ msg: "Server error" });
   }
 };
-
 export const updateToken = async (req: Request, res: Response) => {
   try {
     const { tokenId, userId, truckNumber, weight, commission, totalAmount, manualDate } = req.body;
@@ -166,8 +187,51 @@ export const updateToken = async (req: Request, res: Response) => {
       await tokenRepo.save(allRelevantTokens);
     }
 
+    // ⭐ WHATSAPP NOTIFICATIONS WITH ADMIN CREDENTIALS ⭐
+    const adminUser = targetUser.role === "user" ? targetUser.creator : targetUser;
+    const waInstance = (adminUser as any)?.whatsappInstanceId;
+    const waToken = (adminUser as any)?.whatsappToken;
+    
+    // 1. Message to Customer
+    if (token.customerPhone) {
+      const customerMsg = `Hello *${token.customerName}*,\n\nYour Token has been updated! ✅\n\n🚛 Truck No: ${token.truckNumber}\n📦 Material: ${token.materialType}\n⚖️ Final Weight: ${token.weight} Tons\n💰 Total Amount: ₹${token.totalAmount}\n🔄 Carry Forward: ₹${token.carryForward}\n⏳ Status: ${token.status}\n\nThank you for business! - Bricks Admin`;
+      
+      sendWhatsAppReceipt(token.customerPhone, customerMsg, waInstance, waToken);
+    }
+
+    // 2. Message to User/Dealer (Remaining Tons Update)
+    const dealerPhone = (targetUser as any).phone || (targetUser as any).mobile; 
+    if (dealerPhone) {
+      const dealerMsg = `Hello *${targetUser.name}*,\n\nA token was just updated for customer *${token.customerName}*.\n\n🚛 Truck No: ${token.truckNumber}\n📦 Material: ${token.materialType}\n⚖️ Weight Dispatched: ${token.weight} Tons\n📉 Your Remaining Balance: ${account.remainingTons.toFixed(2)} Tons\n\nYou can now load the next truck accordingly.\n\n- Bricks Admin System`;
+      
+      sendWhatsAppReceipt(dealerPhone, dealerMsg, waInstance, waToken);
+    }
+
+    // 3. 🚨 BROADCAST ALERT TO ALL OTHER PENDING TOKENS 🚨
+    const otherPendingTokens = await tokenRepo
+      .createQueryBuilder("t")
+      .leftJoin("t.user", "u")
+      .leftJoin("u.creator", "c") 
+      .where("t.status = :status", { status: "pending" })
+      .andWhere("t.materialType = :materialType", { materialType: token.materialType })
+      .andWhere("(u.id = :adminId OR c.id = :adminId)", { adminId })
+      .andWhere("t.id != :currentId", { currentId: token.id })
+      .getMany();
+
+    const notifiedPhones = new Set<string>();
+
+    for (const pt of otherPendingTokens) {
+      if (pt.customerPhone && !notifiedPhones.has(pt.customerPhone)) {
+        notifiedPhones.add(pt.customerPhone);
+        
+        const broadcastMsg = `🚨 *Stock Update Alert* 🚨\n\nHello *${pt.customerName}*,\n\nAnother truck was just loaded. The remaining stock for *${token.materialType}* is now only *${account.remainingTons.toFixed(2)} Tons*.\n\nPlease check this balance before bringing your truck to load.\n\n- Bricks Admin System`;
+        
+        sendWhatsAppReceipt(pt.customerPhone, broadcastMsg, waInstance, waToken);
+      }
+    }
+
     return res.json({
-      msg: "✅ Token updated with perfectly balanced ledger chain",
+      msg: "✅ Token updated & Broadcast alert sent to all pending trucks",
       data: token,
     });
   } catch (err) {
@@ -361,19 +425,17 @@ export const getAdminAllUserTokens = async (req: Request, res: Response) => {
       truckNumber: t.truckNumber,
       materialType: t.materialType,
       weight: t.weight,
-      // ⭐ ADDED MISSING FIELDS FROM getAllTokens
       totalAmount: t.totalAmount,
       commission: t.commission,
       ratePerTon: t.ratePerTon,
       paidAmount: t.paidAmount,
-      // =========================================
       carryForward: t.carryForward,
       status: t.status,
       userId: t.user.id,
       userName: t.user.name,
       remainingTons: getRemaining(t.user.id, t.materialType),
       createdAt: t.createdAt,
-      updatedAt: t.updatedAt, // ⭐ Also added updatedAt for the new UI table
+      updatedAt: t.updatedAt, 
       confirmedAt: t.confirmedAt,
     }));
 
@@ -420,5 +482,44 @@ export const deleteToken = async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ msg: "Server error" });
+  }
+};
+
+export const sendUserReportToWhatsApp = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body; // Kiska report bhejna hai
+    const currentUser = req.user!;
+
+    const user = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    // Tokens fetch karein (Pending aur Updated dono)
+    const tokens = await tokenRepo.find({
+      where: { user: { id: user.id } },
+      order: { id: "DESC" },
+    });
+
+    // Material accounts fetch karein
+    const accounts = await accountRepo.find({
+      where: { user: { id: user.id } },
+    });
+
+    const adminUser = user.role === "user" ? user.creator : user;
+    const adminPhone = (user as any).phone || (adminUser as any)?.phone;
+
+    if (!adminPhone) {
+      return res.status(400).json({ msg: "❌ User phone number not found for WhatsApp" });
+    }
+
+    await generateAndSendUserReportPDF(user, tokens, accounts, {
+      instanceId: (adminUser as any)?.whatsappInstanceId,
+      token: (adminUser as any)?.whatsappToken,
+      phone: adminPhone,
+    });
+
+    return res.json({ msg: "📄 PDF Report successfully generated and sent to WhatsApp!" });
+  } catch (error) {
+    console.error("Error sending PDF report:", error);
+    return res.status(500).json({ msg: "Server error while sending PDF report" });
   }
 };
