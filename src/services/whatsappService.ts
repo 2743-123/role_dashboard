@@ -5,9 +5,8 @@ export const sendWhatsAppReceipt = async (
   message: string, 
   instanceId?: string | null, 
   token?: string | null
-) => {
+): Promise<boolean> => {
   try {
-    // Priority: Admin ke apne credentials -> nahi mile toh .env ke default credentials
     const finalInstanceId = instanceId || process.env.WHATSAPP_INSTANCE_ID;
     const finalToken = token || process.env.WHATSAPP_TOKEN;
 
@@ -16,11 +15,18 @@ export const sendWhatsAppReceipt = async (
       return false;
     }
 
-    const response = await axios.post(`https://api.ultramsg.com/${finalInstanceId}/messages/chat`, {
-      token: finalToken,
-      to: phone,
-      body: message
-    });
+    // Phone number sanitization: Sirf numbers rakhega (e.g., +91 98765-43210 -> 919876543210)
+    const sanitizedPhone = phone.replace(/\D/g, "");
+
+    const response = await axios.post(
+      `https://api.ultramsg.com/${finalInstanceId}/messages/chat`,
+      {
+        token: finalToken,
+        to: sanitizedPhone,
+        body: message
+      },
+      { timeout: 10000 } // 10 seconds timeout
+    );
 
     console.log("WhatsApp sent successfully:", response.data);
     return true;
