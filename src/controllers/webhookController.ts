@@ -5,8 +5,8 @@ import { Token } from "../models/Token";
 import { MaterialAccount } from "../models/materialaccount";
 import { generateAndSendUserReportPDF } from "../services/whatappSendServices";
 
-const userRepo = AppDataSource.getRepository(User);
 const tokenRepo = AppDataSource.getRepository(Token);
+const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
 export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
@@ -22,26 +22,29 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
 
       if (senderPhone && (messageBody === "hi" || messageBody === "hello" || messageBody === "report")) {
         
-        // 1. Simple query to find token by customerPhone
-        const matchingToken = await tokenRepo.findOne({
-          where: [
-            { customerPhone: senderPhone }, 
-            { customerPhone: `+${senderPhone}` }
-          ],
-          relations: ["user", "user.creator"]
-        });
+        // 1. QueryBuilder se check karein ki kya yeh phone number kisi Token me customerPhone hai
+        const matchingToken = await tokenRepo.createQueryBuilder("token")
+          .leftJoinAndSelect("token.user", "user")
+          .leftJoinAndSelect("user.creator", "creator")
+          .where("token.customerPhone = :phone OR token.customerPhone = :plusPhone", {
+            phone: senderPhone,
+            plusPhone: `+${senderPhone}`
+          })
+          .orderBy("token.id", "DESC")
+          .getOne();
 
         if (matchingToken) {
           const customerName = matchingToken.customerName;
           const assignedUser = matchingToken.user; 
 
-          const customerTokens = await tokenRepo.find({
-            where: [
-              { customerPhone: senderPhone }, 
-              { customerPhone: `+${senderPhone}` }
-            ],
-            order: { id: "DESC" },
-          });
+          // Saare tokens nikal lein is customer ke liye
+          const customerTokens = await tokenRepo.createQueryBuilder("token")
+            .where("token.customerPhone = :phone OR token.customerPhone = :plusPhone", {
+              phone: senderPhone,
+              plusPhone: `+${senderPhone}`
+            })
+            .orderBy("token.id", "DESC")
+            .getMany();
 
           const accounts = await accountRepo.find({
             where: { user: { id: assignedUser.id } },
@@ -64,14 +67,14 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
           console.log(`✅ Auto PDF token report sent to Customer: ${customerName} (${senderPhone})`);
           return res.status(200).json({ status: "success", sentTo: "customer" });
         } else {
-          // 2. Fallback to User/Dealer check
-          const user = await userRepo.findOne({
-            where: [
-              { phone: senderPhone }, 
-              { phone: `+${senderPhone}` }
-            ],
-            relations: ["creator"],
-          });
+          // 2. QueryBuilder se User/Dealer check karein
+          const user = await userRepo.createQueryBuilder("user")
+            .leftJoinAndSelect("user.creator", "creator")
+            .where("user.phone = :phone OR user.phone = :plusPhone", {
+              phone: senderPhone,
+              plusPhone: `+${senderPhone}`
+            })
+            .getOne();
 
           if (user) {
             const tokens = await tokenRepo.find({
