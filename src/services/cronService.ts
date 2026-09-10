@@ -11,10 +11,10 @@ const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
 export const initBedashScheduler = () => {
-  // Roz dopahar 3:00 PM ke liye: "0 15 * * *"
-  cron.schedule("0 15 * * *", async () => {
+  // 🕒 India ke time ke hisaab se 5:30 PM par chalne ke liye
+  cron.schedule("30 17 * * *", async () => {
     try {
-      console.log("⏰ Running Scheduled Bedash WhatsApp Reminder Task...");
+      console.log("⏰ Running Scheduled Bedash WhatsApp Reminder Task at 5:30 PM...");
 
       // 1. Database se saare Admin aur Superadmin nikal lein
       const admins = await userRepo.find({
@@ -35,7 +35,11 @@ export const initBedashScheduler = () => {
           order: { targetDate: "ASC" }, 
         });
 
-        if (pendingBedashes.length === 0) continue;
+        // 🟢 Agar pending list khali hai toh skip karein aur log print karein
+        if (pendingBedashes.length === 0) {
+          console.log(`ℹ️ No pending bedash for Admin: ${admin.name}. Skipping message.`);
+          continue;
+        }
 
         // Batch Fetching: In sabhi users ke Material Accounts ek sath nikal lein
         const userIds = [...new Set(pendingBedashes.map(b => b.user.id))];
@@ -45,7 +49,7 @@ export const initBedashScheduler = () => {
         });
 
         // 3. Message Format Karein
-        let messageText = `📋 *Scheduled Bedash Report (3:00 PM)* 📋\n\n`;
+        let messageText = `📋 *Scheduled Bedash Report (5:30 PM)* 📋\n\n`;
         messageText += `Hello *${admin.name}*,\nHere are the pending records for your users:\n\n`;
 
         pendingBedashes.forEach((b, index) => {
@@ -59,7 +63,7 @@ export const initBedashScheduler = () => {
             `   - Material: ${b.materialType}\n` +
             `   - Amount: ${b.amount}\n` +
             `   - Target Date: ${b.targetDate}\n` +
-            `   - ⚖️ Remaining: *${remainingTons} Tons*\n\n`; // 👈 Naya Add Kiya Hua Line
+            `   - ⚖️ Remaining: *${remainingTons} Tons*\n\n`; 
         });
 
         // 4. Message Send Karein
@@ -85,5 +89,7 @@ export const initBedashScheduler = () => {
     } catch (error) {
       console.error("❌ Error in Bedash Cron Job:", error);
     }
+}, {
+    timezone: "Asia/Kolkata" // ✅ Sirf timezone rakhein
   });
 };

@@ -14,6 +14,7 @@ const paymentHistoryRepo = AppDataSource.getRepository(PaymentHistory);
 
 const RATE_PER_TON = 180;
 
+// ✅ ADD BALANCE (Updated for User Access)
 export const addBalance = async (req: Request, res: Response) => {
   try {
     const currentUser = req.user!;
@@ -38,8 +39,9 @@ export const addBalance = async (req: Request, res: Response) => {
 
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    if (currentUser.role === "user") {
-      return res.status(403).json({ msg: "❌ You don't have permission to add balance" });
+    // 🟢 Role-Based Validation: User sirf apne liye add kar sakta hai
+    if (currentUser.role === "user" && currentUser.id !== user.id) {
+      return res.status(403).json({ msg: "❌ You can only add balance to your own account" });
     }
 
     if (currentUser.role === "admin" && user.creator?.id !== currentUser.id) {
@@ -148,6 +150,7 @@ export const addBalance = async (req: Request, res: Response) => {
   }
 };
 
+// ✅ EDIT BALANCE (Updated for User Access)
 export const editBalance = async (req: Request, res: Response) => {
   try {
     const { transactionId, flyashAmount = 0, bedashAmount = 0 } = req.body;
@@ -164,7 +167,10 @@ export const editBalance = async (req: Request, res: Response) => {
 
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    if (currentUser.role === "user") return res.status(403).json({ msg: "❌ Access denied" });
+    // 🟢 Role-Based Validation: User sirf apna entry edit kar sakta hai
+    if (currentUser.role === "user" && transaction.user.id !== currentUser.id) {
+      return res.status(403).json({ msg: "❌ You can only edit your own balance" });
+    }
 
     if (currentUser.role === "admin" && transaction.user.creator?.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ Access Denied: Not your user's transaction" });
@@ -204,7 +210,7 @@ export const editBalance = async (req: Request, res: Response) => {
 
     await transactionRepo.save(transaction);
 
-    // 🟠 EDIT BALANCE MESSAGE (Background Process)
+    // 🟠 EDIT BALANCE MESSAGE
     const targetUser = transaction.user;
     const adminUser = targetUser.role === "user" ? targetUser.creator : targetUser;
     const waInstance = (adminUser as any)?.whatsappInstanceId;
@@ -217,7 +223,7 @@ export const editBalance = async (req: Request, res: Response) => {
           const editMsg =
             `✏️ *Balance Updated Alert* ✏️\n\n` +
             `👤 Dealer: *${targetUser.name}*\n\n` +
-            `Admin has corrected your recent balance entry.\n\n` +
+            `Your recent balance entry has been updated.\n\n` +
             `📦 *Updated Flyash:* ₹${flyashAmount} (${newFlyashTons.toFixed(3)} Tons)\n` +
             `• Current Total: *${flyashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
             `📦 *Updated Bedash:* ₹${bedashAmount} (${newBedashTons.toFixed(3)} Tons)\n` +
@@ -238,6 +244,7 @@ export const editBalance = async (req: Request, res: Response) => {
   }
 };
 
+// ✅ DELETE BALANCE (Updated for User Access)
 export const deleteBalance = async (req: Request, res: Response) => {
   try {
     const { transactionId } = req.params;
@@ -250,7 +257,10 @@ export const deleteBalance = async (req: Request, res: Response) => {
 
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    if (currentUser.role === "user") return res.status(403).json({ msg: "❌ Access denied" });
+    // 🟢 Role-Based Validation: User sirf apna entry delete kar sakta hai
+    if (currentUser.role === "user" && transaction.user.id !== currentUser.id) {
+      return res.status(403).json({ msg: "❌ You can only delete your own balance entry" });
+    }
 
     if (currentUser.role === "admin" && transaction.user.creator?.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ Access Denied: Not your user's transaction" });
@@ -299,14 +309,14 @@ export const deleteBalance = async (req: Request, res: Response) => {
     await accountRepo.save([flyashAccount, bedashAccount]);
     await transactionRepo.remove(transaction);
 
-    // 🔴 DELETE BALANCE MESSAGE (Background Process)
+    // 🔴 DELETE BALANCE MESSAGE
     if (dealerPhone) {
       (async () => {
         try {
           const deleteMsg =
             `❌ *Balance Entry Deleted* ❌\n\n` +
             `👤 Dealer: *${targetUser.name}*\n\n` +
-            `Your latest balance addition has been removed by the Admin.\n\n` +
+            `Your latest balance addition has been removed.\n\n` +
             `📉 *Deducted Stock:*\n` +
             `• Flyash: -${deletedFlyashTons.toFixed(3)} Tons\n` +
             `• Bedash: -${deletedBedashTons.toFixed(3)} Tons\n\n` +

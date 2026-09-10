@@ -11,18 +11,13 @@ const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
 // ✅ CREATE BEDASH ENTRY
+// ✅ CREATE BEDASH ENTRY (Updated for User Access)
 export const createBedash = async (req: Request, res: Response) => {
   try {
     const { userId, materialType, customDate, targetDate, amount } = req.body;
     const currentUser = (req as any).user;
 
-    if (!["admin", "superadmin"].includes(currentUser.role)) {
-      return res
-        .status(403)
-        .json({ msg: "❌ Only Admin/SuperAdmin can create" });
-    }
-
-    // 🐛 FIX 1: Find user and verify if admin owns this user
+    // 1: Find user and verify relations
     const user = await userRepo.findOne({ 
       where: { id: userId }, 
       relations: ["creator"] 
@@ -30,14 +25,23 @@ export const createBedash = async (req: Request, res: Response) => {
     
     if (!user) return res.status(404).json({ msg: "❌ User not found" });
 
-    // 🔐 Security FIX: Admin cannot create bedash for another admin's user
-    if (currentUser.role === "admin" && user.creator?.id !== currentUser.id) {
-      return res.status(403).json({ msg: "❌ Access Denied: Not your user" });
+    // 2: Role-based Security Validation
+    if (currentUser.role === "user") {
+      // User khud ke alawa kisi aur ki entry nahi bana sakta
+      if (currentUser.id !== user.id) {
+        return res.status(403).json({ msg: "❌ You can only create requests for yourself" });
+      }
+    } else if (currentUser.role === "admin") {
+      // Admin sirf apne assign kiye hue users ki entry bana sakta hai
+      if (user.creator?.id !== currentUser.id) {
+        return res.status(403).json({ msg: "❌ Access Denied: Not your user" });
+      }
     }
+    // SuperAdmin ke liye koi restriction nahi hai
 
     const bedash = bedashRepo.create({
       user,
-      createdBy: { id: currentUser.id } as any, // 🐛 FIX 2: Passed as relation object
+      createdBy: { id: currentUser.id } as any,
       materialType: materialType as "flyash" | "bedash",
       customDate,
       targetDate,
@@ -124,16 +128,11 @@ export const getBedashList = async (req: Request, res: Response) => {
 
 // ✅ CONFIRM BEDASH (mark completed & deduct balance)
 // ✅ CONFIRM BEDASH (Sirf status update hoga, balance nahi katega)
+// ✅ CONFIRM BEDASH (Admin, SuperAdmin aur Owner User teeno confirm kar sakte hain)
 export const confirmBedash = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const currentUser = (req as any).user;
-
-    if (!["admin", "superadmin"].includes(currentUser.role)) {
-      return res
-        .status(403)
-        .json({ msg: "❌ Only Admin/SuperAdmin can confirm" });
-    }
 
     const bedash = await bedashRepo.findOne({
       where: { id: Number(id) },
@@ -142,16 +141,25 @@ export const confirmBedash = async (req: Request, res: Response) => {
 
     if (!bedash) return res.status(404).json({ msg: "❌ Not found" });
     
-    // 🔐 Security FIX: Admin cannot confirm another admin's record
-    if (currentUser.role === "admin" && bedash.user.creator?.id !== currentUser.id) {
-      return res.status(403).json({ msg: "❌ Access Denied: Not your user's record" });
+    // 🔐 Security Validation based on Role:
+    if (currentUser.role === "user") {
+      // User sirf apna khud ka record confirm kar sakta hai
+      if (bedash.user.id !== currentUser.id) {
+        return res.status(403).json({ msg: "❌ Access Denied: Not your record" });
+      }
+    } else if (currentUser.role === "admin") {
+      // Admin sirf apne assign kiye hue user ka record confirm kar sakta hai
+      if (bedash.user.creator?.id !== currentUser.id) {
+        return res.status(403).json({ msg: "❌ Access Denied: Not your user's record" });
+      }
     }
+    // SuperAdmin kisi ka bhi record confirm kar sakta hai (No restriction)
 
     if (bedash.status === "completed") {
       return res.status(400).json({ msg: "⚠️ Bedash is already confirmed" });
     }
 
-    // ✅ SIRF STATUS COMPLETED KARENGE (Koi Material Minus Nahi Hoga)
+    // ✅ Status Completed update kar denge
     bedash.status = "completed";
     await bedashRepo.save(bedash);
 
