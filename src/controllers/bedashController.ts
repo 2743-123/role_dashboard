@@ -10,11 +10,11 @@ const bedashRepo = AppDataSource.getRepository(BedashMessage);
 const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
-// ✅ CREATE BEDASH ENTRY
-// ✅ CREATE BEDASH ENTRY (Updated for User Access)
+// ✅ CREATE BEDASH ENTRY (Updated for User Access & Reminder Phone)
 export const createBedash = async (req: Request, res: Response) => {
   try {
-    const { userId, materialType, customDate, targetDate, amount } = req.body;
+    // 🟢 reminderPhone ko req.body me add kiya gaya hai
+    const { userId, materialType, customDate, targetDate, amount, reminderPhone } = req.body;
     const currentUser = (req as any).user;
 
     // 1: Find user and verify relations
@@ -47,6 +47,7 @@ export const createBedash = async (req: Request, res: Response) => {
       targetDate,
       status: "pending",
       amount,
+      reminderPhone: reminderPhone || null, // 🟢 Database me save karega (agar diya hai)
     });
 
     await bedashRepo.save(bedash);
@@ -73,7 +74,6 @@ export const getBedashList = async (req: Request, res: Response) => {
         order: { id: "DESC" }
       });
     } else if (currentUser.role === "admin") {
-      // 🐛 FIX 3: Fixed relation queries for 'creator' and 'createdBy'
       bedashList = await bedashRepo.find({
         where: [
           { createdBy: { id: currentUser.id } },
@@ -110,11 +110,12 @@ export const getBedashList = async (req: Request, res: Response) => {
         id: b.id,
         userName: b.user.name,
         materialType: b.materialType,
-        amount: Number(b.amount).toFixed(3), // Exact formatting
+        amount: Number(b.amount).toFixed(3), 
         remainingTons: account ? Number(account.remainingTons).toFixed(3) : "0.000",
         status: b.status,
         customDate: b.customDate,
         targetDate: b.targetDate,
+        reminderPhone: b.reminderPhone, // 🟢 List me bhi phone number bhej rahe hain (optional UI display ke liye)
         createdAt: b.createdAt,
       };
     });
@@ -126,8 +127,6 @@ export const getBedashList = async (req: Request, res: Response) => {
   }
 };
 
-// ✅ CONFIRM BEDASH (mark completed & deduct balance)
-// ✅ CONFIRM BEDASH (Sirf status update hoga, balance nahi katega)
 // ✅ CONFIRM BEDASH (Admin, SuperAdmin aur Owner User teeno confirm kar sakte hain)
 export const confirmBedash = async (req: Request, res: Response) => {
   try {
@@ -143,17 +142,14 @@ export const confirmBedash = async (req: Request, res: Response) => {
     
     // 🔐 Security Validation based on Role:
     if (currentUser.role === "user") {
-      // User sirf apna khud ka record confirm kar sakta hai
       if (bedash.user.id !== currentUser.id) {
         return res.status(403).json({ msg: "❌ Access Denied: Not your record" });
       }
     } else if (currentUser.role === "admin") {
-      // Admin sirf apne assign kiye hue user ka record confirm kar sakta hai
       if (bedash.user.creator?.id !== currentUser.id) {
         return res.status(403).json({ msg: "❌ Access Denied: Not your user's record" });
       }
     }
-    // SuperAdmin kisi ka bhi record confirm kar sakta hai (No restriction)
 
     if (bedash.status === "completed") {
       return res.status(400).json({ msg: "⚠️ Bedash is already confirmed" });

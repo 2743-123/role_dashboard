@@ -11,10 +11,10 @@ const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
 export const initBedashScheduler = () => {
-  // 🕒 India ke time ke hisaab se 5:30 PM par chalne ke liye
-  cron.schedule("30 17 * * *", async () => {
+  // 🕒 3:00 PM (15:00) aur 4:00 PM (16:00) ke liye set
+  cron.schedule("0 15,16 * * *", async () => {
     try {
-      console.log("⏰ Running Scheduled Bedash WhatsApp Reminder Task at 5:30 PM...");
+      console.log("⏰ Running Scheduled Bedash WhatsApp Reminder Task...");
 
       // 1. Database se saare Admin aur Superadmin nikal lein
       const admins = await userRepo.find({
@@ -35,7 +35,6 @@ export const initBedashScheduler = () => {
           order: { targetDate: "ASC" }, 
         });
 
-        // 🟢 Agar pending list khali hai toh skip karein aur log print karein
         if (pendingBedashes.length === 0) {
           console.log(`ℹ️ No pending bedash for Admin: ${admin.name}. Skipping message.`);
           continue;
@@ -48,48 +47,104 @@ export const initBedashScheduler = () => {
           relations: ["user"]
         });
 
-        // 3. Message Format Karein
-        let messageText = `📋 *Scheduled Bedash Report (5:30 PM)* 📋\n\n`;
-        messageText += `Hello *${admin.name}*,\nHere are the pending records for your users:\n\n`;
+        const instanceId = admin.whatsappInstanceId;
+        const token = admin.whatsappToken;
 
-        pendingBedashes.forEach((b, index) => {
-          // Is specific user ka specific material balance dhundhein
+        // 🟢 3. Admin ka Message Format tayar karein
+        let adminMessageText = `📋 *Scheduled Bedash Report* 📋\n\n`;
+        adminMessageText += `Hello *${admin.name}*,\nHere are the pending records for your users:\n\n`;
+        let adminIndex = 1;
+
+        // Customers ke records unke number ke hisaab se group karne ke liye Map banayenge
+        const customerTasksMap = new Map<string, any[]>();
+
+        for (const b of pendingBedashes) {
           const userAccount = accounts.find(
             a => a.user.id === b.user.id && a.materialType === b.materialType
           );
           const remainingTons = userAccount ? Number(userAccount.remainingTons).toFixed(3) : "0.000";
 
-          messageText += `${index + 1}. User: *${b.user?.name}*\n` +
+          // 👉 3a. Admin ke message me sabhi (eg. 4) items add honge
+          adminMessageText += `${adminIndex}. User: *${b.user?.name}*\n` +
             `   - Material: ${b.materialType}\n` +
             `   - Amount: ${b.amount}\n` +
             `   - Target Date: ${b.targetDate}\n` +
             `   - ⚖️ Remaining: *${remainingTons} Tons*\n\n`; 
-        });
+          adminIndex++;
 
-        // 4. Message Send Karein
+          // 👉 3b. Customer ka record uske number ke aage save karein
+          if (b.reminderPhone) {
+            const phone = b.reminderPhone.trim();
+            if (!customerTasksMap.has(phone)) {
+              customerTasksMap.set(phone, []);
+            }
+            customerTasksMap.get(phone)!.push({
+              userName: b.user?.name,
+              materialType: b.materialType,
+              amount: b.amount,
+              targetDate: b.targetDate,
+              remainingTons: remainingTons
+            });
+          }
+        }
+
+        adminMessageText += `- Bricks Admin System`;
+
+        // 4. Messages Send Karne Ki Baari
+        
+        // 👉 A. Admin ko Final List bhejein
         const adminPhone = admin.phone; 
-        const instanceId = admin.whatsappInstanceId;
-        const token = admin.whatsappToken;
-
         if (adminPhone && instanceId && token) {
           try {
             await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
               token: token,
               to: adminPhone,
-              body: messageText,
+              body: adminMessageText,
             });
-            console.log(`✅ Bedash report (with remaining tons) successfully sent to Admin: ${admin.name} (${adminPhone})`);
+            console.log(`✅ Full Bedash report sent to Admin: ${adminPhone}`);
           } catch (waErr) {
-            console.error(`❌ WhatsApp delivery failed for Admin ${admin.name}:`, waErr);
+            console.error(`❌ Admin WhatsApp delivery failed for: ${adminPhone}`, waErr);
           }
-        } else {
-          console.log(`⚠️ Admin ${admin.name} is missing phone number or WhatsApp credentials.`);
         }
+
+        // 👉 B. Har Customer ko EXACT SAME FORMAT me uske (eg. 3) records bhejein
+        if (instanceId && token) {
+          for (const [phone, tasks] of customerTasksMap.entries()) {
+            
+            // 🟢 YAHAN CHANGE KIYA HAI: Hello *User* permanent kar diya gaya hai
+            let customerMsg = `📋 *Scheduled Bedash Report* 📋\n\n`;
+            customerMsg += `Hello *User*,\nHere are the pending records:\n\n`;
+            
+            let custIndex = 1;
+            for (const task of tasks) {
+              customerMsg += `${custIndex}. User: *${task.userName}*\n` +
+                `   - Material: ${task.materialType}\n` +
+                `   - Amount: ${task.amount}\n` +
+                `   - Target Date: ${task.targetDate}\n` +
+                `   - ⚖️ Remaining: *${task.remainingTons} Tons*\n\n`;
+              custIndex++;
+            }
+            customerMsg += `- Bricks Admin System`;
+
+            // Customer ko send karein
+            try {
+              await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+                token: token,
+                to: phone,
+                body: customerMsg,
+              });
+              console.log(`✅ Personal Bedash report sent to Customer: ${phone}`);
+            } catch (err) {
+              console.error(`❌ Customer WhatsApp delivery failed for: ${phone}`);
+            }
+          }
+        }
+
       }
     } catch (error) {
       console.error("❌ Error in Bedash Cron Job:", error);
     }
-}, {
-    timezone: "Asia/Kolkata" // ✅ Sirf timezone rakhein
+  }, {
+    timezone: "Asia/Kolkata" 
   });
 };

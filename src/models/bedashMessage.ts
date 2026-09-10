@@ -45,6 +45,10 @@ export class BedashMessage {
   @Column({ type: "enum", enum: ["pending", "completed"], default: "pending" })
   status!: "pending" | "completed";
 
+  // 🟢 NAYA ADD KIYA HUA COLUMN (Optional Phone Number ke liye)
+  @Column({ type: "varchar", nullable: true })
+  reminderPhone!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 
