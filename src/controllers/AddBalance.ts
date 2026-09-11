@@ -13,8 +13,9 @@ const transactionRepo = AppDataSource.getRepository(Transaction);
 const paymentHistoryRepo = AppDataSource.getRepository(PaymentHistory);
 
 const RATE_PER_TON = 180;
+const TRUCK_CAPACITY = 27; // 27 Tons per token/truck
 
-// ✅ ADD BALANCE (Updated for User Access)
+// ✅ ADD BALANCE (Alert strictly to Admin)
 export const addBalance = async (req: Request, res: Response) => {
   try {
     const currentUser = req.user!;
@@ -39,7 +40,6 @@ export const addBalance = async (req: Request, res: Response) => {
 
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    // 🟢 Role-Based Validation: User sirf apne liye add kar sakta hai
     if (currentUser.role === "user" && currentUser.id !== user.id) {
       return res.status(403).json({ msg: "❌ You can only add balance to your own account" });
     }
@@ -67,8 +67,11 @@ export const addBalance = async (req: Request, res: Response) => {
     const flyashAccount = await getOrCreateAccount("flyash");
     const bedashAccount = await getOrCreateAccount("bedash");
 
-    const flyashTons = flyashAmount / RATE_PER_TON;
-    const bedashTons = bedashAmount / RATE_PER_TON;
+    const oldFlyashRemaining = Number(flyashAccount.remainingTons || 0);
+    const oldBedashRemaining = Number(bedashAccount.remainingTons || 0);
+
+    const flyashTons = Number(flyashAmount) / RATE_PER_TON;
+    const bedashTons = Number(bedashAmount) / RATE_PER_TON;
 
     flyashAccount.totalTons += flyashTons;
     flyashAccount.remainingTons += flyashTons;
@@ -78,9 +81,11 @@ export const addBalance = async (req: Request, res: Response) => {
 
     await accountRepo.save([flyashAccount, bedashAccount]);
 
+    const totalMoney = Number(flyashAmount) + Number(bedashAmount);
+
     const transaction = transactionRepo.create({
       user,
-      totalAmount: flyashAmount + bedashAmount,
+      totalAmount: totalMoney,
       flyashAmount,
       bedashAmount,
       flyashTons,
@@ -97,7 +102,7 @@ export const addBalance = async (req: Request, res: Response) => {
       user,
       admin: { id: currentUser.id } as any,
       type: "add_balance",
-      amount: flyashAmount + bedashAmount,
+      amount: totalMoney,
       details: {
         flyashAmount,
         bedashAmount,
@@ -109,36 +114,46 @@ export const addBalance = async (req: Request, res: Response) => {
     });
     await paymentHistoryRepo.save(history);
 
-    // 🟢 CREATE BALANCE MESSAGE (Background Process)
+    const flyashTokensAvail = (flyashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
+    const bedashTokensAvail = (bedashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
+
+    // 🟢 ADMIN DETAILS EXTRACT KAREIN (Sirf Admin ko message bhejne ke liye)
     const adminUser = user.role === "user" ? user.creator : user;
+    const adminPhone = (adminUser as any)?.phone || (currentUser as any)?.phone;
     const waInstance = (adminUser as any)?.whatsappInstanceId;
     const waToken = (adminUser as any)?.whatsappToken;
-    const dealerPhone = (user as any)?.phone || (user as any)?.mobile;
 
-    if (dealerPhone) {
+    if (adminPhone) {
       (async () => {
         try {
           const balanceMsg =
-            `💰 *New Balance Added Successfully!* 💰\n\n` +
-            `👤 Dealer: *${user.name}*\n\n` +
-            `📦 *Flyash:* \n` +
-            `• Added: ₹${flyashAmount} (${flyashTons.toFixed(3)} Tons)\n` +
-            `• New Total: *${flyashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
-            `📦 *Bedash:* \n` +
-            `• Added: ₹${bedashAmount} (${bedashTons.toFixed(3)} Tons)\n` +
-            `• New Total: *${bedashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
-            `💵 Total Amount Added: ₹${flyashAmount + bedashAmount}\n` +
-            `💳 Payment Mode: ${paymentMode}\n` +
+            `💰 *Admin Alert: New Balance Added!* 💰\n\n` +
+            `👤 Dealer: *${user.name}*\n` +
+            `📅 Date: ${new Date().toLocaleDateString("en-GB")}\n\n` +
+            `📦 *Fly Ash Details:*\n` +
+            `• Added Amount: ₹${flyashAmount}\n` +
+            `• Stock Added: +${flyashTons.toFixed(3)} Tons\n` +
+            `• Calculation: ${oldFlyashRemaining.toFixed(3)} + ${flyashTons.toFixed(3)}\n` +
+            `• Final Remaining: *${flyashAccount.remainingTons.toFixed(3)} Tons*\n` +
+            `• 🎫 Available Tokens: ~${flyashTokensAvail} Tokens\n\n` +
+            `📦 *Bed Ash Details:*\n` +
+            `• Added Amount: ₹${bedashAmount}\n` +
+            `• Stock Added: +${bedashTons.toFixed(3)} Tons\n` +
+            `• Calculation: ${oldBedashRemaining.toFixed(3)} + ${bedashTons.toFixed(3)}\n` +
+            `• Final Remaining: *${bedashAccount.remainingTons.toFixed(3)} Tons*\n` +
+            `• 🎫 Available Tokens: ~${bedashTokensAvail} Tokens\n\n` +
+            `💵 *Total Amount:* ₹${totalMoney}\n` +
+            `💳 *Payment Mode:* ${paymentMode.toUpperCase()}\n` +
             `${
               paymentMode === "online"
-                ? `🏦 Bank: ${bankName}\n🔢 Ref No: ${referenceNumber}\n`
+                ? `🏦 Bank: ${bankName || "N/A"}\n👤 Holder: ${accountHolder || "N/A"}\n🔢 Ref No: ${referenceNumber || "N/A"}\n`
                 : ""
-            }` +
-            `\n- Bricks Admin System`;
+            }\n` +
+            `- Bricks Admin Management`;
 
-          await sendWhatsAppReceipt(dealerPhone, balanceMsg, waInstance, waToken);
+          await sendWhatsAppReceipt(adminPhone, balanceMsg, waInstance, waToken);
         } catch (waError) {
-          console.error("WhatsApp notification failed on add:", waError);
+          console.error("WhatsApp delivery failed on add balance:", waError);
         }
       })();
     }
@@ -150,7 +165,7 @@ export const addBalance = async (req: Request, res: Response) => {
   }
 };
 
-// ✅ EDIT BALANCE (Updated for User Access)
+// ✅ EDIT BALANCE (Alert strictly to Admin)
 export const editBalance = async (req: Request, res: Response) => {
   try {
     const { transactionId, flyashAmount = 0, bedashAmount = 0 } = req.body;
@@ -167,7 +182,6 @@ export const editBalance = async (req: Request, res: Response) => {
 
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    // 🟢 Role-Based Validation: User sirf apna entry edit kar sakta hai
     if (currentUser.role === "user" && transaction.user.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ You can only edit your own balance" });
     }
@@ -185,15 +199,23 @@ export const editBalance = async (req: Request, res: Response) => {
 
     if (!flyashAccount || !bedashAccount) return res.status(400).json({ msg: "Material account missing" });
 
-    const oldFlyashTons = transaction.flyashTons;
-    const oldBedashTons = transaction.bedashTons;
-    const newFlyashTons = flyashAmount / RATE_PER_TON;
-    const newBedashTons = bedashAmount / RATE_PER_TON;
+    const prevRemainingFlyash = Number(flyashAccount.remainingTons || 0);
+    const prevRemainingBedash = Number(bedashAccount.remainingTons || 0);
 
-    if (flyashAccount.remainingTons + oldFlyashTons < newFlyashTons)
+    const oldFlyashTons = Number(transaction.flyashTons || 0);
+    const oldBedashTons = Number(transaction.bedashTons || 0);
+    const newFlyashTons = Number(flyashAmount) / RATE_PER_TON;
+    const newBedashTons = Number(bedashAmount) / RATE_PER_TON;
+
+    const flyashDiffTons = newFlyashTons - oldFlyashTons;
+    const bedashDiffTons = newBedashTons - oldBedashTons;
+
+    if (flyashAccount.remainingTons + oldFlyashTons < newFlyashTons) {
       return res.status(400).json({ msg: "❌ Flyash already used. Can't reduce." });
-    if (bedashAccount.remainingTons + oldBedashTons < newBedashTons)
+    }
+    if (bedashAccount.remainingTons + oldBedashTons < newBedashTons) {
       return res.status(400).json({ msg: "❌ Bedash already used. Can't reduce." });
+    }
 
     flyashAccount.totalTons = flyashAccount.totalTons - oldFlyashTons + newFlyashTons;
     flyashAccount.remainingTons = flyashAccount.remainingTons - oldFlyashTons + newFlyashTons;
@@ -204,35 +226,46 @@ export const editBalance = async (req: Request, res: Response) => {
 
     transaction.flyashAmount = flyashAmount;
     transaction.bedashAmount = bedashAmount;
-    transaction.totalAmount = flyashAmount + bedashAmount;
+    transaction.totalAmount = Number(flyashAmount) + Number(bedashAmount);
     transaction.flyashTons = newFlyashTons;
     transaction.bedashTons = newBedashTons;
 
     await transactionRepo.save(transaction);
 
-    // 🟠 EDIT BALANCE MESSAGE
+    const flyashTokensAvail = (flyashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
+    const bedashTokensAvail = (bedashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
+
     const targetUser = transaction.user;
     const adminUser = targetUser.role === "user" ? targetUser.creator : targetUser;
+    const adminPhone = (adminUser as any)?.phone || (currentUser as any)?.phone;
     const waInstance = (adminUser as any)?.whatsappInstanceId;
     const waToken = (adminUser as any)?.whatsappToken;
-    const dealerPhone = (targetUser as any)?.phone || (targetUser as any)?.mobile;
 
-    if (dealerPhone) {
+    if (adminPhone) {
       (async () => {
         try {
           const editMsg =
-            `✏️ *Balance Updated Alert* ✏️\n\n` +
-            `👤 Dealer: *${targetUser.name}*\n\n` +
-            `Your recent balance entry has been updated.\n\n` +
-            `📦 *Updated Flyash:* ₹${flyashAmount} (${newFlyashTons.toFixed(3)} Tons)\n` +
-            `• Current Total: *${flyashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
-            `📦 *Updated Bedash:* ₹${bedashAmount} (${newBedashTons.toFixed(3)} Tons)\n` +
-            `• Current Total: *${bedashAccount.remainingTons.toFixed(3)} Tons*\n\n` +
-            `- Bricks Admin System`;
+            `✏️ *Admin Alert: Balance Entry Updated* ✏️\n\n` +
+            `👤 Dealer: *${targetUser.name}*\n` +
+            `🔢 Transaction ID: #${transaction.id}\n\n` +
+            `📦 *Fly Ash Adjustment:*\n` +
+            `• Old Entry: ${oldFlyashTons.toFixed(3)} Tons\n` +
+            `• New Entry: ${newFlyashTons.toFixed(3)} Tons (₹${flyashAmount})\n` +
+            `• Stock Change: ${flyashDiffTons >= 0 ? `+${flyashDiffTons.toFixed(3)}` : flyashDiffTons.toFixed(3)} Tons\n` +
+            `• Remaining Stock: *${flyashAccount.remainingTons.toFixed(3)} Tons*\n` +
+            `• 🎫 Available Tokens: ~${flyashTokensAvail} Tokens\n\n` +
+            `📦 *Bed Ash Adjustment:*\n` +
+            `• Old Entry: ${oldBedashTons.toFixed(3)} Tons\n` +
+            `• New Entry: ${newBedashTons.toFixed(3)} Tons (₹${bedashAmount})\n` +
+            `• Stock Change: ${bedashDiffTons >= 0 ? `+${bedashDiffTons.toFixed(3)}` : bedashDiffTons.toFixed(3)} Tons\n` +
+            `• Remaining Stock: *${bedashAccount.remainingTons.toFixed(3)} Tons*\n` +
+            `• 🎫 Available Tokens: ~${bedashTokensAvail} Tokens\n\n` +
+            `💵 *Updated Total:* ₹${transaction.totalAmount}\n\n` +
+            `- Bricks Admin Management`;
 
-          await sendWhatsAppReceipt(dealerPhone, editMsg, waInstance, waToken);
+          await sendWhatsAppReceipt(adminPhone, editMsg, waInstance, waToken);
         } catch (waErr) {
-          console.error("WhatsApp delivery failed on edit:", waErr);
+          console.error("WhatsApp delivery failed on edit balance:", waErr);
         }
       })();
     }
@@ -244,7 +277,7 @@ export const editBalance = async (req: Request, res: Response) => {
   }
 };
 
-// ✅ DELETE BALANCE (Updated for User Access)
+// ✅ DELETE BALANCE (Alert strictly to Admin)
 export const deleteBalance = async (req: Request, res: Response) => {
   try {
     const { transactionId } = req.params;
@@ -257,7 +290,6 @@ export const deleteBalance = async (req: Request, res: Response) => {
 
     if (!transaction) return res.status(404).json({ msg: "Transaction not found" });
 
-    // 🟢 Role-Based Validation: User sirf apna entry delete kar sakta hai
     if (currentUser.role === "user" && transaction.user.id !== currentUser.id) {
       return res.status(403).json({ msg: "❌ You can only delete your own balance entry" });
     }
@@ -291,43 +323,47 @@ export const deleteBalance = async (req: Request, res: Response) => {
       return res.status(400).json({ msg: "❌ Bedash already used. Can't delete balance." });
     }
 
-    flyashAccount.totalTons -= transaction.flyashTons;
-    flyashAccount.remainingTons -= transaction.flyashTons;
-    bedashAccount.totalTons -= transaction.bedashTons;
-    bedashAccount.remainingTons -= transaction.bedashTons;
+    const deletedFlyashTons = Number(transaction.flyashTons);
+    const deletedBedashTons = Number(transaction.bedashTons);
+    const deletedFlyashAmount = Number(transaction.flyashAmount);
+    const deletedBedashAmount = Number(transaction.bedashAmount);
+    const deletedTotalAmount = Number(transaction.totalAmount);
 
-    const deletedFlyashTons = transaction.flyashTons;
-    const deletedBedashTons = transaction.bedashTons;
-    
-    // Store credentials before deleting transaction object
+    flyashAccount.totalTons -= deletedFlyashTons;
+    flyashAccount.remainingTons -= deletedFlyashTons;
+    bedashAccount.totalTons -= deletedBedashTons;
+    bedashAccount.remainingTons -= deletedBedashTons;
+
     const targetUser = transaction.user;
     const adminUser = targetUser.role === "user" ? targetUser.creator : targetUser;
+    const adminPhone = (adminUser as any)?.phone || (currentUser as any)?.phone;
     const waInstance = (adminUser as any)?.whatsappInstanceId;
     const waToken = (adminUser as any)?.whatsappToken;
-    const dealerPhone = (targetUser as any)?.phone || (targetUser as any)?.mobile;
 
     await accountRepo.save([flyashAccount, bedashAccount]);
     await transactionRepo.remove(transaction);
 
-    // 🔴 DELETE BALANCE MESSAGE
-    if (dealerPhone) {
+    const flyashTokensAvail = (flyashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
+    const bedashTokensAvail = (bedashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
+
+    if (adminPhone) {
       (async () => {
         try {
           const deleteMsg =
-            `❌ *Balance Entry Deleted* ❌\n\n` +
-            `👤 Dealer: *${targetUser.name}*\n\n` +
-            `Your latest balance addition has been removed.\n\n` +
-            `📉 *Deducted Stock:*\n` +
-            `• Flyash: -${deletedFlyashTons.toFixed(3)} Tons\n` +
-            `• Bedash: -${deletedBedashTons.toFixed(3)} Tons\n\n` +
-            `📊 *Your New Remaining Balance:*\n` +
-            `• Flyash: ${flyashAccount.remainingTons.toFixed(3)} Tons\n` +
-            `• Bedash: ${bedashAccount.remainingTons.toFixed(3)} Tons\n\n` +
-            `- Bricks Admin System`;
+            `❌ *Admin Alert: Balance Entry Removed* ❌\n\n` +
+            `👤 Dealer: *${targetUser.name}*\n` +
+            `🔢 Transaction ID: #${transaction.id}\n\n` +
+            `📦 *Stock Deducted:*\n` +
+            `• Fly Ash: -${deletedFlyashTons.toFixed(3)} Tons (₹${deletedFlyashAmount})\n` +
+            `• Remaining Fly Ash: *${flyashAccount.remainingTons.toFixed(3)} Tons* (~${flyashTokensAvail} Tokens)\n\n` +
+            `• Bed Ash: -${deletedBedashTons.toFixed(3)} Tons (₹${deletedBedashAmount})\n` +
+            `• Remaining Bed Ash: *${bedashAccount.remainingTons.toFixed(3)} Tons* (~${bedashTokensAvail} Tokens)\n\n` +
+            `💵 *Total Amount Removed:* ₹${deletedTotalAmount}\n\n` +
+            `- Bricks Admin Management`;
 
-          await sendWhatsAppReceipt(dealerPhone, deleteMsg, waInstance, waToken);
+          await sendWhatsAppReceipt(adminPhone, deleteMsg, waInstance, waToken);
         } catch (waErr) {
-          console.error("WhatsApp delivery failed on delete:", waErr);
+          console.error("WhatsApp delivery failed on delete balance:", waErr);
         }
       })();
     }
