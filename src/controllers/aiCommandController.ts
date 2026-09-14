@@ -8,9 +8,9 @@ import bcrypt from "bcryptjs";
 import { User } from "../models/User";
 import { MaterialAccount } from "../models/materialaccount";
 import { Transaction } from "../models/Transaction";
-import { Token } from "../models/Token"; 
-import { BedashMessage } from "../models/bedashMessage"; 
-import { PaymentHistory } from "../models/PaymentHistory"; 
+import { Token } from "../models/Token";
+import { BedashMessage } from "../models/bedashMessage";
+import { PaymentHistory } from "../models/PaymentHistory";
 
 // AI Configuration
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -20,8 +20,8 @@ const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 const transactionRepo = AppDataSource.getRepository(Transaction);
 const tokenRepo = AppDataSource.getRepository(Token);
-const bedashRepo = AppDataSource.getRepository(BedashMessage); 
-const paymentRepo = AppDataSource.getRepository(PaymentHistory); 
+const bedashRepo = AppDataSource.getRepository(BedashMessage);
+const paymentRepo = AppDataSource.getRepository(PaymentHistory);
 
 const RATE_PER_TON = 180;
 
@@ -75,7 +75,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
     `;
 
     const aiResponse = await ai.models.generateContent({
-      model: "gemini-3.5-flash-lite", 
+      model: "gemini-3.5-flash-lite",
       contents: prompt,
     });
 
@@ -113,16 +113,16 @@ export const handleAiCommand = async (req: Request, res: Response) => {
     // ============================================
     else if (intent === "CREATE_USER") {
       if (!params.name) return res.json({ msg: "🤖 User ka naam batana zaroori hai." });
-      
+
       const hashedPassword = await bcrypt.hash("password123", 10);
-      const newUser = userRepo.create({ 
-        name: params.name, 
-        role: params.role || "user", 
+      const newUser = userRepo.create({
+        name: params.name,
+        role: params.role || "user",
         phone: params.phone || "",
         email: `${params.name.replace(/\s+/g, "").toLowerCase()}@bricks.com`,
         password: hashedPassword,
         isActive: true,
-        creator: currentUser 
+        creator: currentUser
       });
       await userRepo.save(newUser);
       return res.json({ msg: `✅ User '${params.name}' system me add ho gaya hai.` });
@@ -134,7 +134,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
     else if (intent === "DELETE_USER") {
       const user = await findUser(targetUserName);
       if (!user) return res.json({ msg: `🤖 '${targetUserName}' naam ka user nahi mila.` });
-      
+
       if (!checkPermission(currentUser, user)) return res.json({ msg: "🚫 Aap is user ko delete nahi kar sakte." });
 
       await AppDataSource.manager.transaction(async (manager) => {
@@ -177,13 +177,13 @@ export const handleAiCommand = async (req: Request, res: Response) => {
       });
       await transactionRepo.save(transaction);
 
-      const payment = paymentRepo.create({ 
-        user: user, 
+      const payment = paymentRepo.create({
+        user: user,
         admin: { id: currentUser.id } as any,
-        amount: totalMoney, 
+        amount: totalMoney,
         type: "add_balance",
-        details: { flyashAmount: fAmt, bedashAmount: bAmt, flyashTons: fTons, bedashTons: bTons, paymentMode: params.paymentMode || "cash" } 
-      } as any); 
+        details: { flyashAmount: fAmt, bedashAmount: bAmt, flyashTons: fTons, bedashTons: bTons, paymentMode: params.paymentMode || "cash" }
+      } as any);
       await paymentRepo.save(payment);
 
       return res.json({ msg: `✅ ${user.name} ke account me Flyash: ₹${fAmt} aur Bedash: ₹${bAmt} add ho gaye hain.` });
@@ -203,7 +203,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
         const checkOtherName = await findUser(customerNameInput);
         if (checkOtherName) {
           user = checkOtherName;
-          finalCustomerName = dealerNameInput; 
+          finalCustomerName = dealerNameInput;
         }
       }
 
@@ -221,15 +221,15 @@ export const handleAiCommand = async (req: Request, res: Response) => {
         .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
         .orderBy("t.id", "DESC").getOne();
 
-      const newToken = tokenRepo.create({ 
-        customerName: finalCustomerName, 
+      const newToken = tokenRepo.create({
+        customerName: finalCustomerName,
         customerPhone: params.customerPhone || null,
-        user: user, 
-        truckNumber: params.truckNumber || null, 
-        materialType: params.materialType || "flyash", 
+        user: user,
+        truckNumber: params.truckNumber || null,
+        materialType: params.materialType || "flyash",
         weight: 0, commission: 0, totalAmount: 0, paidAmount: 0,
         status: "pending",
-        carryForward: lastToken ? Number(lastToken.carryForward || 0) : 0, 
+        carryForward: lastToken ? Number(lastToken.carryForward || 0) : 0,
       });
 
       await tokenRepo.save(newToken);
@@ -244,7 +244,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
       if (!user) return res.json({ msg: "🤖 Kiske liye request banani hai? Naam batayein." });
       if (!checkPermission(currentUser, user)) return res.json({ msg: "🚫 Permission Denied." });
 
-      const action = params.action?.toLowerCase(); 
+      const action = params.action?.toLowerCase();
       if (action === "add") {
         const newBedash = bedashRepo.create({
           user: user,
@@ -252,21 +252,21 @@ export const handleAiCommand = async (req: Request, res: Response) => {
           materialType: params.materialType || "flyash",
           amount: Number(params.amount) || 0,
           reminderPhone: params.reminderPhone || null,
-          status: "pending" 
-        }); 
+          status: "pending"
+        });
         await bedashRepo.save(newBedash);
         return res.json({ msg: `✅ ${user.name} ke liye request add ho gayi hai.` });
-      } 
+      }
       else if (action === "confirm") {
         const pending = await bedashRepo.findOne({
           where: { user: { id: user.id }, status: "pending" }, order: { id: "DESC" }
         });
         if (!pending) return res.json({ msg: `🤖 Koi pending request nahi mili.` });
-        
+
         pending.status = "completed";
         await bedashRepo.save(pending);
         return res.json({ msg: `✅ ${user.name} ki request COMPLETED mark ho gayi hai.` });
-      } 
+      }
     }
 
     // ============================================
@@ -298,17 +298,17 @@ export const handleAiCommand = async (req: Request, res: Response) => {
       });
       return res.json({ msg: replyMsg });
     }
-    
+
     // ============================================
     // 8. GET_BALANCE
     // ============================================
     else if (intent === "GET_BALANCE") {
       const user = await findUser(targetUserName);
       if (!user) return res.json({ msg: "🤖 Kiska balance check karna hai? Naam batayein." });
-      
+
       const flyash = await accountRepo.findOne({ where: { user: { id: user.id }, materialType: "flyash" } });
       const bedash = await accountRepo.findOne({ where: { user: { id: user.id }, materialType: "bedash" } });
-      
+
       return res.json({ msg: `🤖 **${user.name} ka Stock:**\n📦 Flyash: ${flyash?.remainingTons || 0} Tons\n📦 Bedash: ${bedash?.remainingTons || 0} Tons.` });
     }
 
@@ -326,7 +326,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
         const checkOtherName = await findUser(customerNameInput);
         if (checkOtherName) {
           user = checkOtherName;
-          finalCustomerName = dealerNameInput; 
+          finalCustomerName = dealerNameInput;
         }
       }
 
@@ -336,7 +336,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
 
       const tokenToDelete = await tokenRepo.findOne({
         where: { user: { id: user.id }, customerName: finalCustomerName, status: "pending" },
-        order: { id: "DESC" } 
+        order: { id: "DESC" }
       });
 
       if (!tokenToDelete) {
@@ -349,7 +349,7 @@ export const handleAiCommand = async (req: Request, res: Response) => {
       return res.json({ msg: `✅ Customer *${finalCustomerName}* ki aakhri pending Token (ID: #${deletedId}) successfully delete kar di gayi hai.` });
     }
 
-// ============================================
+    // ============================================
     // 10. UPDATE TOKEN (🚀 Auto-Healing Stock & Ledger Logic)
     // ============================================
     else if (intent === "UPDATE_TOKEN") {
@@ -396,12 +396,12 @@ export const handleAiCommand = async (req: Request, res: Response) => {
       // --- STOCK SUFFICIENT CHECK ---
       const account = await accountRepo.findOne({ where: { user: { id: user.id }, materialType: tokenToUpdate.materialType } });
       const oldWeight = Number(tokenToUpdate.weight || 0);
-      
+
       let finalNewWeight = oldWeight;
       if (newWeight !== undefined && newWeight !== null && newWeight !== "") {
         finalNewWeight = Number(newWeight);
       }
-      
+
       const diff = finalNewWeight - oldWeight;
 
       if (diff > 0 && account && diff > Number(account.remainingTons)) {
@@ -411,14 +411,14 @@ export const handleAiCommand = async (req: Request, res: Response) => {
       // --- ✏️ VALUES UPDATE ---
       if (newTruckNumber) tokenToUpdate.truckNumber = newTruckNumber;
       tokenToUpdate.weight = finalNewWeight;
-      
+
       if (newCommission !== undefined && newCommission !== null && newCommission !== "") {
         tokenToUpdate.commission = Number(newCommission);
       }
-      
+
       const rateToUse = tokenToUpdate.ratePerTon || RATE_PER_TON;
       tokenToUpdate.totalAmount = (finalNewWeight * rateToUse) + Number(tokenToUpdate.commission || 0);
-      
+
       if (newDate) {
         tokenToUpdate.updatedAt = new Date(newDate);
       } else if (tokenToUpdate.status === "pending") {
@@ -434,17 +434,17 @@ export const handleAiCommand = async (req: Request, res: Response) => {
         const allTokensForStock = await tokenRepo.find({
           where: { user: { id: user.id }, materialType: tokenToUpdate.materialType }
         });
-        
+
         // Step 2: Sabka weight jod kar Used Tons banao
         let exactUsedTons = 0;
         allTokensForStock.forEach(t => {
           exactUsedTons += Number(t.weight || 0);
         });
-        
+
         // Step 3: Total - Used = Remaining
         account.usedTons = exactUsedTons;
         account.remainingTons = Number(account.totalTons) - exactUsedTons;
-        
+
         await accountRepo.save(account);
       }
 
@@ -480,8 +480,8 @@ export const handleAiCommand = async (req: Request, res: Response) => {
 
       await tokenRepo.save(tokensToSave);
 
-      return res.json({ 
-        msg: `✅ Token #${tokenToUpdate.id} successfully update ho gaya!\n\n🚛 Truck: ${tokenToUpdate.truckNumber || "N/A"}\n⚖️ Weight: ${tokenToUpdate.weight} Tons\n💰 Commission: ₹${tokenToUpdate.commission || 0}\n💵 Total Bill: ₹${tokenToUpdate.totalAmount}` 
+      return res.json({
+        msg: `✅ Token #${tokenToUpdate.id} successfully update ho gaya!\n\n🚛 Truck: ${tokenToUpdate.truckNumber || "N/A"}\n⚖️ Weight: ${tokenToUpdate.weight} Tons\n💰 Commission: ₹${tokenToUpdate.commission || 0}\n💵 Total Bill: ₹${tokenToUpdate.totalAmount}`
       });
     }
 
