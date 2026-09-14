@@ -308,32 +308,36 @@ export const updateToken = async (req: Request, res: Response) => {
 
     if (!account) return res.status(400).json({ msg: "Material account not found" });
 
+    // ✅ Safe Weight Parsing
     const oldWeight = Number(token.weight || 0);
-    const newWeight = Number(weight);
+    const newWeight = (weight !== undefined && weight !== null && weight !== "") ? Number(weight) : oldWeight;
     const diff = newWeight - oldWeight;
 
+    // Check balance before proceeding
     if (diff > 0 && diff > Number(account.remainingTons)) {
       return res.status(400).json({
         msg: `Insufficient balance. Available: ${account.remainingTons}`,
       });
     }
 
-    account.usedTons = Math.max(0, Number(account.usedTons) + diff);
-    account.remainingTons = Number(account.remainingTons) - diff;
-    await accountRepo.save(account);
-
     const ratePerTon = 180;
+    
+    // ✅ Safe Commission Parsing
+    const safeCommission = (commission !== undefined && commission !== null && commission !== "") ? Number(commission) : Number(token.commission || 0);
+
+    // ✅ Safe Total Amount Parsing
     const finalTotalAmount =
-      totalAmount !== undefined
+      (totalAmount !== undefined && totalAmount !== null && totalAmount !== "")
         ? Number(totalAmount)
-        : newWeight * ratePerTon + Number(commission || 0);
+        : (newWeight * ratePerTon) + safeCommission;
 
     const adminId = targetUser.role === "user" ? targetUser.creator?.id : targetUser.id;
 
+    // Update Token Fields
     token.user = targetUser;
-    token.truckNumber = truckNumber;
+    if (truckNumber !== undefined) token.truckNumber = truckNumber;
     token.weight = newWeight;
-    token.commission = Number(commission || 0);
+    token.commission = safeCommission;
     token.ratePerTon = ratePerTon;
     token.totalAmount = finalTotalAmount;
 
@@ -341,7 +345,31 @@ export const updateToken = async (req: Request, res: Response) => {
       token.updatedAt = new Date(manualDate);
     }
 
+    // 💾 Token Database me save karna (Taki auto-healing ise count kar sake)
     await tokenRepo.save(token);
+
+    // ==========================================
+    // 🧮 AUTO-HEALING STOCK CALCULATION
+    // ==========================================
+    if (account) {
+      // 1. User ke us material ki saari tokens nikalo
+      const allTokensForStock = await tokenRepo.find({
+        where: { user: { id: targetUser.id }, materialType: token.materialType }
+      });
+
+      // 2. Sabka weight jod kar Used Tons banao
+      let exactUsedTons = 0;
+      allTokensForStock.forEach(t => {
+        exactUsedTons += Number(t.weight || 0);
+      });
+
+      // 3. Total - Used = Remaining (Zero NaN chance)
+      account.usedTons = exactUsedTons;
+      account.remainingTons = Number(account.totalTons) - exactUsedTons;
+
+      await accountRepo.save(account);
+    }
+    // ==========================================
 
     // Ledger Re-calculation
     const prevTokenBeforeCurrent = await tokenRepo
@@ -377,8 +405,8 @@ export const updateToken = async (req: Request, res: Response) => {
       runningCarry = Number((runningCarry + tPaid - tTotal).toFixed(2));
       t.carryForward = runningCarry;
 
-      if (tTotal > 0) {
-        t.status = runningCarry >= 0 ? "completed" : "updated";
+      if (tTotal > 0 && t.status === "pending") {
+        t.status = "updated";
       }
     }
 

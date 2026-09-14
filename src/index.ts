@@ -14,6 +14,7 @@ import dotenv from "dotenv";
 import paymentRoutes from "./routes/paymentRoutes";
 import backupRoutes from "./routes/backupRoutes";
 import { initBedashScheduler } from "./services/cronService"; // 👈 1. Cron service import kiya
+import aiRoutes from "./routes/aiRoutes"
 
 dotenv.config();
 
@@ -43,7 +44,7 @@ app.use("/api/message", BedashMessage);
 app.use("/api/payment-history", paymentRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api", webhookRoutes);
-
+app.use("/api/ai", aiRoutes);
 // Logging
 app.use(
   morgan("dev", {

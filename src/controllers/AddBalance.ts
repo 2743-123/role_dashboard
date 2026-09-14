@@ -343,6 +343,18 @@ export const deleteBalance = async (req: Request, res: Response) => {
     await accountRepo.save([flyashAccount, bedashAccount]);
     await transactionRepo.remove(transaction);
 
+    const lastPaymentHistory = await paymentHistoryRepo.findOne({
+      where: { 
+        user: { id: transaction.user.id }, 
+        type: "add_balance" // Sirf add balance wali history check karega
+      },
+      order: { createdAt: "DESC" }, // Sabse latest wali
+    });
+
+    if (lastPaymentHistory) {
+      await paymentHistoryRepo.remove(lastPaymentHistory);
+    }
+
     const flyashTokensAvail = (flyashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
     const bedashTokensAvail = (bedashAccount.remainingTons / TRUCK_CAPACITY).toFixed(1);
 
