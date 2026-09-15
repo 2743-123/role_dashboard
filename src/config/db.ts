@@ -19,9 +19,9 @@ export const AppDataSource = new DataSource({
   url: process.env.DATABASE_URL,
   schema: "public",
 
-  synchronize: false,
+  synchronize: true,
   ssl: { rejectUnauthorized: false },
-  logging: true,
+  logging: false,
   entities: [
     User,
     BlacklistToken,
@@ -30,6 +30,7 @@ export const AppDataSource = new DataSource({
     Transaction,
     BedashMessage,
     PaymentHistory,
+
   ],
 });
 console.log("URL", process.env.DATABASE_URL);

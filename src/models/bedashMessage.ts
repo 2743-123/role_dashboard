@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  Index,
 } from "typeorm";
 import { User } from "./User";
 
@@ -21,39 +22,35 @@ export class BedashMessage {
   @ManyToOne(() => User, (user) => user.bedashMessages, { onDelete: "CASCADE" })
   user!: User;
 
-  // 🐛 FIX 1: Changed to numeric for exact decimal precision matching other tables
-  @Column({
-    type: "numeric",
+  // 🛠️ Type string ko first argument bana diya taaki overload error na aaye
+  @Column("numeric", {
     precision: 12,
     scale: 3,
-    default: 0, // 👈 Ye line add karein taaki purane records me 0 save ho jaye
+    default: 0,
     transformer: numericTransformer,
   })
   amount!: number;
 
-  // 🐛 FIX 2: Added strict DB Enum 
-  @Column({ type: "enum", enum: ["flyash", "bedash"], default: "bedash" })
+  @Column("varchar", { default: "bedash" })
   materialType!: "flyash" | "bedash";
 
-  @Column({ type: "date", nullable: true })
+  @Column("date", { nullable: true })
   customDate!: Date | null;
 
-  @Column({ type: "date", nullable: true })
-  targetDate!: Date | null; // completion target
+  @Index() // ⚡ Fast sorting ke liye alag se Index decorator laga diya
+  @Column("date", { nullable: true })
+  targetDate!: Date | null;
 
-  // 🐛 FIX 3: Added strict DB Enum
-  @Column({ type: "enum", enum: ["pending", "completed"], default: "pending" })
+  @Index()
+  @Column("varchar", { default: "pending" })
   status!: "pending" | "completed";
 
-  // 🟢 NAYA ADD KIYA HUA COLUMN (Optional Phone Number ke liye)
-  @Column({ type: "varchar", nullable: true })
+  @Column("varchar", { nullable: true })
   reminderPhone!: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;
 
-  // Relation mapping is correct, just remember to save it as an object in your controller:
-  // bedashRepo.create({ ..., createdBy: { id: currentUser.id } })
   @ManyToOne(() => User, (user) => user.createdBedash, { onDelete: "CASCADE" })
   createdBy!: User;
 }

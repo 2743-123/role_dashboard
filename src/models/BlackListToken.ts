@@ -11,12 +11,12 @@ export class BlacklistToken {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  // 🐛 FIX 1 & 2: Added 'text' for long JWTs and 'unique: true' (which creates an Index) for lightning-fast lookups
- @Index()
-  @Column({ 
-    type: "text", 
+  // ⚡ Index lagaya lookup fast karne ke liye
+  // ⚡ "text" ko pehla argument banaya taaki TypeScript error na de
+  @Index()
+  @Column("text", { 
     unique: true, 
-    nullable: true // 👈 Isey add karein taaki purane records error na dein
+    nullable: true // 🛡️ Database safety ke liye taaki purane data par error na aaye
   })
   token!: string;
 

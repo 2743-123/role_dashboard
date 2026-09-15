@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne } from "typeorm";
+import { 
+  Entity, 
+  PrimaryGeneratedColumn, 
+  Column, 
+  CreateDateColumn, 
+  ManyToOne, 
+  Index 
+} from "typeorm";
 import { User } from "./User";
 
 @Entity()
@@ -12,16 +19,22 @@ export class PaymentHistory {
   @ManyToOne(() => User, { onDelete: "SET NULL", nullable: true })
   admin!: User; // Kis admin ne payment add/confirm kiya
 
-  @Column({ type: "varchar", length: 50 })
+  // ⚡ Index for fast filtering (eg: sirf "token_payment" wali history dekhna)
+  // 🛠️ "varchar" ko pehla argument banaya TypeORM error se bachne ke liye
+  @Index()
+  @Column("varchar", { length: 50 })
   type!: "add_balance" | "token_payment";
 
-  @Column({ type: "numeric", precision: 12, scale: 2 })
+  // 🛠️ "numeric" as first argument
+  @Column("numeric", { precision: 12, scale: 2 })
   amount!: number; // Total amount jo pay/add hua is baar
 
-  // JSON format me truck numbers, weight aur baki details store karne ke liye
-  @Column({ type: "json", nullable: true })
+  // 🛠️ "json" as first argument (truck details, weight wagarah ke liye)
+  @Column("json", { nullable: true })
   details!: any; 
 
+  // ⚡ Index lagaya taaki date ke hisaab se sorting (Latest payments) ekdam fast ho
+  @Index()
   @CreateDateColumn()
   createdAt!: Date;
 }

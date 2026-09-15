@@ -1,41 +1,55 @@
+import dotenv from "dotenv";
+dotenv.config(); // 👈 Sabse pehle env variables load hone chahiye
+
+import "reflect-metadata";
+import compression from "compression";
 import express from "express";
 import cors from "cors";
-import "reflect-metadata";
+import morgan from "morgan";
+import { logger } from "./config/logger";
 import { AppDataSource } from "./config/db";
+
+// Routes
 import authroutes from "./routes/auth";
 import userroutes from "./routes/user";
 import addBalance from "./routes/addBalance";
 import BedashMessage from "./routes/bedashRoutes";
 import token from "./routes/Token";
 import webhookRoutes from "./routes/webhookRoutes";
-import morgan from "morgan";
-import { logger } from "./config/logger";
-import dotenv from "dotenv";
 import paymentRoutes from "./routes/paymentRoutes";
 import backupRoutes from "./routes/backupRoutes";
-import { initBedashScheduler } from "./services/cronService"; // 👈 1. Cron service import kiya
-import aiRoutes from "./routes/aiRoutes"
+import aiRoutes from "./routes/aiRoutes";
 
-dotenv.config();
+// Cron Service
+import { initBedashScheduler } from "./services/cronService";
 
 const app = express();
 
+// 1. Compression
+app.use(compression());
+
+// 2. CORS
+const corsOptions = {
+  origin: ["https://roll-frontend-one.vercel.app", "http://localhost:3000"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
+// 3. Request Logging (Routes se pehle taaki saari requests log hon)
 app.use(
-  cors({
-    origin: ["https://roll-frontend-one.vercel.app", "http://localhost:3000"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders:["Content-Type","Authorization"],
-    credentials: true,
+  morgan("dev", {
+    stream: { write: (message) => logger.info(message.trim()) },
   })
 );
-app.options(/.*/,cors());
-// parse JSON
+
+// 4. Body Parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const PORT = process.env.PORT || 5000;
-
-// ROUTES
+// 5. Routes
 app.use("/api/auth", authroutes);
 app.use("/api/users", userroutes);
 app.use("/api/balance", addBalance);
@@ -45,22 +59,19 @@ app.use("/api/payment-history", paymentRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api", webhookRoutes);
 app.use("/api/ai", aiRoutes);
-// Logging
-app.use(
-  morgan("dev", {
-    stream: { write: (message) => logger.info(message.trim()) },
-  })
-);
 
-// DATABASE + SERVER START
+// 6. Database & Server Initialization
+const PORT = process.env.PORT || 5000;
+
 AppDataSource.initialize()
   .then(() => {
     console.log("Database connected");
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     
-    // 🚀 2. Server start hote hi 3:00 PM wala Bedash Cron Scheduler start ho jayega
-    initBedashScheduler(); 
+    // Scheduler init
+    initBedashScheduler();
   })
   .catch((err) => {
     console.error("Database connection error", err);
+    process.exit(1);
   });

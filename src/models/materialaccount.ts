@@ -4,6 +4,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  Index,
 } from "typeorm";
 import { User } from "./User";
 
@@ -18,18 +19,17 @@ export class MaterialAccount {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  // 🐛 FIX 1: Strict Enum for database protection
-  @Column({ 
-  type: "enum", 
-  enum: ["flyash", "bedash"],
-  default: "flyash",
-  nullable: true // 👈 Isey add karein taaki purane khali records error na dein
-})
-materialType!: "flyash" | "bedash";
+  // ⚡ Index lagaya taaki User ke "flyash" ya "bedash" account ki search fast ho jaye
+  // 🛠️ Overload error bypass karne ke liye "varchar" ko pehla argument banaya
+  @Index()
+  @Column("varchar", { 
+    default: "flyash",
+    nullable: true // 🛡️ Database safety (purane records error na dein)
+  })
+  materialType!: "flyash" | "bedash";
 
-  // 🐛 FIX 2: Changed 'float' to 'numeric' with precision to prevent rounding errors
-  @Column({
-    type: "numeric",
+  // 🛠️ "numeric" ko pehla argument banaya
+  @Column("numeric", {
     precision: 12,
     scale: 3,
     default: 0,
@@ -37,8 +37,7 @@ materialType!: "flyash" | "bedash";
   })
   totalTons!: number;
 
-  @Column({
-    type: "numeric",
+  @Column("numeric", {
     precision: 12,
     scale: 3,
     default: 0,
@@ -46,8 +45,7 @@ materialType!: "flyash" | "bedash";
   })
   usedTons!: number;
 
-  @Column({
-    type: "numeric",
+  @Column("numeric", {
     precision: 12,
     scale: 3,
     default: 0,

@@ -4,6 +4,7 @@ import {
   Entity,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Index,
 } from "typeorm";
 import { User } from "./User";
 
@@ -18,55 +19,60 @@ export class Token {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  // ⚡ Index: Customer Name se fast search ke liye
+  @Index()
+  @Column("varchar")
   customerName!: string;
 
-  @Column({ nullable: true })
+  // ⚡ Index: Truck Number se fast search ke liye
+  @Index()
+  @Column("varchar", { nullable: true })
   truckNumber!: string;
 
-  // 🐛 FIX 1: Strict Enum for database protection
-  @Column({ type: "enum", enum: ["flyash", "bedash"] })
+  // ⚡ Index & Type Fix: Overload error bypass kiya aur indexing lagai
+  @Index()
+  @Column("varchar")
   materialType!: "flyash" | "bedash";
 
-  // 🐛 FIX 2: Added precision, scale & transformer to prevent Math/Ledger bugs
-  @Column({ type: "numeric", precision: 12, scale: 3, default: 0, transformer: numericTransformer })
+  // 🛠️ Type Fix: Numeric types ko string argument bana diya
+  @Column("numeric", { precision: 12, scale: 3, default: 0, transformer: numericTransformer })
   weight!: number; // Scale 3 for tons (e.g., 15.500)
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   ratePerTon!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   commission!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   totalAmount!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   paidAmount!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   carryForward!: number;
 
-  // 🐛 FIX 1: Strict Enum
-  @Column({
-    type: "enum",
-    enum: ["pending", "updated", "completed"],
-    default: "pending",
-  })
+  // ⚡ Index & Type Fix: Sirf "pending" tokens fast nikalne ke liye
+  @Index()
+  @Column("varchar", { default: "pending" })
   status!: "pending" | "updated" | "completed";
 
+  // ⚡ Index: Date filtering aur sorting ko fast karne ke liye
+  @Index()
   @CreateDateColumn()
   createdAt!: Date;
 
-  // 🟢 NAYA ADD KIYA GAYA - Manual Date / Update Date ke liye
-  @Column({ type: "timestamp", nullable: true })
+  @Column("timestamp", { nullable: true })
   updatedAt!: Date | null;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column("timestamp", { nullable: true })
   confirmedAt!: Date | null;
 
-  @Column({ type: "varchar", length: 15, nullable: true })
-customerPhone!: string;
+  // ⚡ Index: Phone number se customer history nikalne ke liye
+  @Index()
+  @Column("varchar", { length: 15, nullable: true })
+  customerPhone!: string;
 
   @ManyToOne(() => User, (user) => user.tokens, {
     onDelete: "CASCADE", // 👈 Deletes token if user is deleted

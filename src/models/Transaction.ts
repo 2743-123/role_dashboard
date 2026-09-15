@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  Index,
 } from "typeorm";
 import { User } from "./User";
 
@@ -22,37 +23,41 @@ export class Transaction {
   @ManyToOne(() => User, (user) => user.transactions, { onDelete: "CASCADE" })
   user!: User;
 
-  // 🐛 FIX 1: Added transformer to prevent String vs Number calculation bugs
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  // 🛠️ Type Fix: numeric ko pehla argument banaya
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   totalAmount!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   flyashAmount!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   bedashAmount!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 3, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 3, default: 0, transformer: numericTransformer })
   flyashTons!: number;
 
-  @Column({ type: "numeric", precision: 12, scale: 3, default: 0, transformer: numericTransformer })
+  @Column("numeric", { precision: 12, scale: 3, default: 0, transformer: numericTransformer })
   bedashTons!: number;
 
-  // 🐛 FIX 2: Changed to 'enum' to strictly restrict DB inputs
-  @Column({ type: "enum", enum: ["cash", "online"], default: "cash" })
+  // ⚡ Index & Type Fix: Overload error hataya aur fast filter ke liye index lagaya
+  @Index()
+  @Column("varchar", { default: "cash" })
   paymentMode!: "cash" | "online";
 
   // Optional fields for extra payment details
-  @Column({ type: "varchar", length: 100, nullable: true })
+  @Column("varchar", { length: 100, nullable: true })
   bankName!: string | null;
 
-  @Column({ type: "varchar", length: 100, nullable: true })
+  @Column("varchar", { length: 100, nullable: true })
   accountHolder!: string | null;
 
-  @Column({ type: "varchar", length: 100, nullable: true })
+  // ⚡ Index: Reference number / UTR number se transaction dhoondhna ekdam fast hoga
+  @Index()
+  @Column("varchar", { length: 100, nullable: true })
   referenceNumber!: string | null;
 
-  // Auto set when transaction is created
+  // ⚡ Index: Date-wise reports nikalne ke liye index lagaya
+  @Index()
   @CreateDateColumn()
   createdAt!: Date;
 }
