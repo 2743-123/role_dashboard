@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict 2RZmZG6D9hIzp7F3JVVoprGn8n9KM05TTeFNsWZ73Uph9gbFdcd4ta5EpAS7mIw
+\restrict CR2kSDKFbZxonDS0tb4EtlykL0dIc98JmKAYnwFC3LUdskOUcTstyfgEbsoE5h3
 
--- Dumped from database version 17.6
--- Dumped by pg_dump version 17.6
+-- Dumped from database version 18.6
+-- Dumped by pg_dump version 18.6
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -19,118 +19,9 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
---
--- Name: user; Type: TABLE; Schema: public; Owner: dashboard_user
---
-
-CREATE TABLE public."user" (
-    id integer NOT NULL,
-    email character varying NOT NULL,
-    password character varying NOT NULL,
-    role character varying DEFAULT 'user'::character varying NOT NULL,
-    "createdAt" timestamp without time zone DEFAULT now() NOT NULL,
-    "isActive" boolean DEFAULT true NOT NULL
-);
-
-
-ALTER TABLE public."user" OWNER TO dashboard_user;
-
---
--- Name: user_id_seq; Type: SEQUENCE; Schema: public; Owner: dashboard_user
---
-
-CREATE SEQUENCE public.user_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.user_id_seq OWNER TO dashboard_user;
-
---
--- Name: user_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: dashboard_user
---
-
-ALTER SEQUENCE public.user_id_seq OWNED BY public."user".id;
-
-
---
--- Name: user id; Type: DEFAULT; Schema: public; Owner: dashboard_user
---
-
-ALTER TABLE ONLY public."user" ALTER COLUMN id SET DEFAULT nextval('public.user_id_seq'::regclass);
-
-
---
--- Data for Name: user; Type: TABLE DATA; Schema: public; Owner: dashboard_user
---
-
-COPY public."user" (id, email, password, role, "createdAt", "isActive") FROM stdin;
-1	asifandhi@gmail.com	$2b$10$okwBWwgEkOxjCnYBJ2IeouMoHOL3BIz0O70LhKNif0GFzsKm2C1Rq	admin	2025-09-25 14:26:15.397142	t
-4	asifandhi25@gmail.com	$2b$10$hSffB3ojpWwx6jalglQnw.lZD3kNaFZ1W4CI3oKw5aqJxdb26a1zO	superadmin	2025-09-27 09:41:17.570818	t
-6	asifandhi2567@gmail.com	$2b$10$/FV8zS0i/epqlCr8QfsR1eVidu/JqxFJS7fxSkjO3sTnScDWPImEi	user	2025-09-27 11:51:51.630635	t
-8	asifandhi10@gmail.com	$2b$10$Xk73AYoSZHamo7CjEv.sle4xFr5VsmfJv4sRARoQjzWoGxNxIuvZG	user	2025-09-27 11:55:01.239879	t
-9	asifandhi01@gmail.com	$2b$10$OJUA3PGGHw552iOCEfuv2eubRf5SNM01/xbMZ4bIx9L2zPHeEJKXK	user	2025-09-27 11:56:17.273555	t
-2	asifandhi0@gmail.com	$2b$10$ETavLiuqG2Gpnx/3kCKuw.oWC9bWhYcGVAflLJ/V0XWMg7wAPnbz6	superadmin	2025-09-25 17:29:35.816116	t
-5	asifandhi123@gmail.com	$2b$10$mT0yCWdOpYDopCswbKtqvODdS1nY6DczdjJTGSJJHt78SjOmfn5PW	user	2025-09-27 11:49:49.844121	t
-10	asifandhi250@gmail.com	$2b$10$u8e2TvIp9CwYCMjgnApL9O.vobU0BoF.VNDVvjIwWIlR7653CRxsm	user	2025-09-27 19:49:29.207994	t
-\.
-
-
---
--- Name: user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: dashboard_user
---
-
-SELECT pg_catalog.setval('public.user_id_seq', 10, true);
-
-
---
--- Name: user PK_cace4a159ff9f2512dd42373760; Type: CONSTRAINT; Schema: public; Owner: dashboard_user
---
-
-ALTER TABLE ONLY public."user"
-    ADD CONSTRAINT "PK_cace4a159ff9f2512dd42373760" PRIMARY KEY (id);
-
-
---
--- Name: user UQ_e12875dfb3b1d92d7d7c5377e22; Type: CONSTRAINT; Schema: public; Owner: dashboard_user
---
-
-ALTER TABLE ONLY public."user"
-    ADD CONSTRAINT "UQ_e12875dfb3b1d92d7d7c5377e22" UNIQUE (email);
-
-
---
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pg_database_owner
---
-
-GRANT ALL ON SCHEMA public TO dashboard_user;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: postgres
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO dashboard_user;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: postgres
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO dashboard_user;
-
-
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 2RZmZG6D9hIzp7F3JVVoprGn8n9KM05TTeFNsWZ73Uph9gbFdcd4ta5EpAS7mIw
+\unrestrict CR2kSDKFbZxonDS0tb4EtlykL0dIc98JmKAYnwFC3LUdskOUcTstyfgEbsoE5h3
 
