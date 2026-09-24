@@ -7,6 +7,10 @@ import { User } from "../models/User";
 import { MaterialAccount } from "../models/materialaccount";
 import { generateAndSendUserReportPDF } from "./whatappSendServices";
 
+// ⭐ MASTER SWITCH: Isko 'true' rakhne se WhatsApp aur Chrome start nahi hoga (RAM bachegi).
+// Future me jab aap server/VPS upgrade karein, toh isko bas 'false' kar dena!
+const DISABLE_WHATSAPP = true;
+
 // ⭐ PRODUCTION FIX: Prevent Node.js server crashes from internal Puppeteer/WhatsApp errors
 process.on("unhandledRejection", (reason: any, promise) => {
   const errorMsg = reason?.message || String(reason);
@@ -16,7 +20,7 @@ process.on("unhandledRejection", (reason: any, promise) => {
     errorMsg.includes("EBUSY") ||
     errorMsg.includes("Session closed") ||
     errorMsg.includes("Target closed") ||
-    errorMsg.includes("The browser is already running") // ⭐ YAHAN NAYA ERROR FIX KIYA HAI
+    errorMsg.includes("The browser is already running")
   ) {
     console.log("⚠️ Suppressed internal Puppeteer error:", errorMsg.split('\n')[0]);
   } else {
@@ -28,28 +32,41 @@ export const sessionStatus = new Map<string, string>();
 export const qrCodeData = new Map<string, string>(); 
 const activeClients = new Map<string, Client>(); 
 
+// ⭐ RACE CONDITION LOCK: Prevents multiple browsers from opening for the same admin
+const initializingClients = new Set<string>();
+
 const tokenRepo = AppDataSource.getRepository(Token);
 const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
+// ==========================================
+// 🧹 Helper: Clean Orphaned Lock Files
+// ==========================================
+const cleanLockFile = (sessionId: string) => {
+  if (DISABLE_WHATSAPP) return;
+  const lockFilePath = path.join(process.cwd(), ".wwebjs_auth", `session-${sessionId}`, "SingletonLock");
+  if (fs.existsSync(lockFilePath)) {
+    try {
+      fs.unlinkSync(lockFilePath);
+      console.log(`🧹 Cleared orphaned browser lock for ${sessionId}`);
+    } catch (err) {}
+  }
+};
+
 const registerMessageListener = (client: Client) => {
+  if (DISABLE_WHATSAPP) return;
+  
   client.on("message", async (msg) => {
-    console.log("🚨 MESSAGE EVENT TRIGGERED:", msg.from, "Body:", msg.body);
     try {
       let senderPhone = "";
-      
       const rawChatId = msg.from;
       if (rawChatId.includes("156126406566128") || rawChatId.includes("917622855036")) {
         senderPhone = "7622855036"; 
       } else if (msg.from.includes("@lid")) {
         try {
           const contact = await msg.getContact();
-          if (contact && contact.number) {
-            senderPhone = contact.number;
-          }
-        } catch (err) {
-          console.error("Failed to get contact from LID:", err);
-        }
+          if (contact && contact.number) senderPhone = contact.number;
+        } catch (err) {}
       }
 
       if (!senderPhone) {
@@ -58,81 +75,34 @@ const registerMessageListener = (client: Client) => {
 
       const messageBody = msg.body?.trim().toLowerCase();
 
-      console.log(`📩 Resolved Sender Phone: ${senderPhone} | Message: "${messageBody}"`);
-
       if (senderPhone && (messageBody === "hi" || messageBody === "hello" || messageBody === "report")) {
-        
         const matchingToken = await tokenRepo.createQueryBuilder("token")
           .leftJoinAndSelect("token.user", "user")
           .leftJoinAndSelect("user.creator", "creator")
-          .where("token.customerPhone LIKE :phone OR token.customerPhone LIKE :plusPhone", {
-            phone: `%${senderPhone}%`,
-            plusPhone: `%+${senderPhone}%`
-          })
+          .where("token.customerPhone LIKE :phone OR token.customerPhone LIKE :plusPhone", { phone: `%${senderPhone}%`, plusPhone: `%+${senderPhone}%` })
           .orderBy("token.id", "DESC")
           .getOne();
 
         if (matchingToken) {
           const customerName = matchingToken.customerName;
           const assignedUser = matchingToken.user; 
-
-          const customerTokens = await tokenRepo.createQueryBuilder("token")
-            .where("token.customerPhone LIKE :phone OR token.customerPhone LIKE :plusPhone", {
-              phone: `%${senderPhone}%`,
-              plusPhone: `%+${senderPhone}%`
-            })
-            .orderBy("token.id", "DESC")
-            .getMany();
-
-          const accounts = await accountRepo.find({
-            where: { user: { id: assignedUser.id } },
-          });
-
+          const customerTokens = await tokenRepo.createQueryBuilder("token").where("token.customerPhone LIKE :phone OR token.customerPhone LIKE :plusPhone", { phone: `%${senderPhone}%`, plusPhone: `%+${senderPhone}%` }).orderBy("token.id", "DESC").getMany();
+          const accounts = await accountRepo.find({ where: { user: { id: assignedUser.id } } });
           const adminUser = assignedUser.role === "user" ? assignedUser.creator : assignedUser;
           const targetAdminId = adminUser?.id || assignedUser.id;
 
-          const reportUser = {
-            id: assignedUser.id,
-            name: customerName,
-            email: assignedUser.email || "customer@bricks.com",
-          };
-
-          await generateAndSendUserReportPDF(reportUser as any, customerTokens, accounts, {
-            adminId: targetAdminId,
-            phone: senderPhone,
-          });
-
+          await generateAndSendUserReportPDF({ id: assignedUser.id, name: customerName, email: assignedUser.email || "customer@bricks.com" } as any, customerTokens, accounts, { adminId: targetAdminId, phone: senderPhone });
           console.log(`✅ Auto PDF token report sent to Customer: ${customerName} (${senderPhone})`);
         } else {
-          const user = await userRepo.createQueryBuilder("user")
-            .leftJoinAndSelect("user.creator", "creator")
-            .where("user.phone LIKE :phone OR user.phone LIKE :plusPhone", {
-              phone: `%${senderPhone}%`,
-              plusPhone: `%+${senderPhone}%`
-            })
-            .getOne();
-
+          const user = await userRepo.createQueryBuilder("user").leftJoinAndSelect("user.creator", "creator").where("user.phone LIKE :phone OR user.phone LIKE :plusPhone", { phone: `%${senderPhone}%`, plusPhone: `%+${senderPhone}%` }).getOne();
           if (user) {
-            const tokens = await tokenRepo.find({
-              where: { user: { id: user.id } },
-              order: { id: "DESC" },
-            });
-
-            const accounts = await accountRepo.find({
-              where: { user: { id: user.id } },
-            });
-
+            const tokens = await tokenRepo.find({ where: { user: { id: user.id } }, order: { id: "DESC" } });
+            const accounts = await accountRepo.find({ where: { user: { id: user.id } } });
             const adminUser = user.role === "user" ? user.creator : user;
             const targetAdminId = adminUser?.id || user.id;
 
-            await generateAndSendUserReportPDF(user, tokens, accounts, {
-              adminId: targetAdminId,
-              phone: senderPhone,
-            });
-
+            await generateAndSendUserReportPDF(user, tokens, accounts, { adminId: targetAdminId, phone: senderPhone });
             console.log(`✅ Auto PDF report sent to Dealer: ${user.name} (${senderPhone})`);
-          } else {
-            console.log(`❌ Phone number ${senderPhone} not found in database.`);
           }
         }
       }
@@ -142,72 +112,62 @@ const registerMessageListener = (client: Client) => {
   });
 };
 
-export const initWhatsAppOnLogin = async (adminId: number) => {
-  const sessionId = `admin_${adminId}`;
+// ⭐ 1. INSTANT STATUS CHECK (For SuperAdmin UI Fast Response)
+export const getWhatsAppStatus = (adminId: string | number): string => {
+  if (DISABLE_WHATSAPP) return "DISCONNECTED";
 
-  if (activeClients.has(sessionId)) {
-    console.log(`✅ WhatsApp already running for Admin ID: ${adminId}`);
-    return activeClients.get(sessionId);
+  const currentStatus = sessionStatus.get(String(adminId));
+  if (currentStatus === "CONNECTED" || currentStatus === "QR_READY") return currentStatus;
+
+  const sessionId = `admin_${adminId}`;
+  const sessionPath = path.join(process.cwd(), ".wwebjs_auth", `session-${sessionId}`);
+
+  if (fs.existsSync(sessionPath)) {
+    sessionStatus.set(String(adminId), "CONNECTED"); 
+    getOrRestoreClient(adminId).catch(() => {});
+    return "CONNECTED";
   }
 
-  console.log(`🔄 Starting WhatsApp auto-connect for Admin ID: ${adminId}...`);
-  sessionStatus.set(String(adminId), "INITIALIZING");
+  sessionStatus.set(String(adminId), "DISCONNECTED");
+  return "DISCONNECTED";
+};
+
+// ⭐ 2. BACKGROUND RESTORE LOGIC
+const getOrRestoreClient = async (adminId: string | number): Promise<Client | null> => {
+  if (DISABLE_WHATSAPP) return null;
+
+  const sessionId = `admin_${adminId}`;
   
+  if (activeClients.has(sessionId)) return activeClients.get(sessionId)!;
+  if (initializingClients.has(sessionId)) return null; 
+
+  const sessionPath = path.join(process.cwd(), `.wwebjs_auth/session-${sessionId}`);
+  if (!fs.existsSync(sessionPath)) return null;
+
+  initializingClients.add(sessionId); 
+  cleanLockFile(sessionId); 
+
   const client = new Client({
     authStrategy: new LocalAuth({ clientId: sessionId }),
-    puppeteer: {
-      headless: true, 
-      args: [
-        "--no-sandbox",             
-        "--disable-setuid-sandbox", 
-        "--disable-dev-shm-usage",  
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-      ],
-    },
+    puppeteer: { headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] }
   });
 
-  client.on("qr", (qr) => {
-    console.log(`⚠️ New QR Code generated for Admin ${adminId}. Scan required.`);
-    sessionStatus.set(String(adminId), "QR_READY");
-    qrCodeData.set(String(adminId), qr); 
+  client.on("qr", async () => {
+    console.log(`⚠️ Admin ${adminId} session expired. Killing background process.`);
+    sessionStatus.set(String(adminId), "DISCONNECTED");
+    setTimeout(async () => { try { if (client) await client.destroy(); } catch (err) {} }, 1000);
   });
 
   client.on("ready", () => {
-    console.log(`✅ WhatsApp Auto-Connected & Ready for Admin ID: ${adminId}`);
+    console.log(`✅ Auto-reconnected WhatsApp for Admin ID: ${adminId}`);
     sessionStatus.set(String(adminId), "CONNECTED");
-    qrCodeData.delete(String(adminId)); 
     activeClients.set(sessionId, client);
   });
 
-  client.on("disconnected", async (reason) => {
-    console.log(`❌ WhatsApp Disconnected for Admin ${adminId}:`, reason);
+  client.on("disconnected", async () => {
     sessionStatus.set(String(adminId), "DISCONNECTED");
-    qrCodeData.delete(String(adminId));
     activeClients.delete(sessionId);
-
-    try {
-      const user = await userRepo.findOne({ where: { id: Number(adminId) } });
-      if (user) {
-        user.whatsappInstanceId = null as any;
-        user.whatsappToken = null as any;
-        await userRepo.save(user);
-        console.log(`🗑️ Cleared DB WhatsApp tokens for Admin ${adminId}.`);
-      }
-    } catch (err) {
-      console.error("Cleanup error on DB disconnect:", err);
-    }
-
-    setTimeout(async () => {
-      try {
-        if (client) {
-          await client.destroy();
-          console.log(`🛑 Client destroyed safely for Admin ${adminId}`);
-        }
-      } catch (err) {}
-    }, 3000);
+    setTimeout(async () => { try { if (client) await client.destroy(); } catch (err) {} }, 2000);
   });
 
   registerMessageListener(client);
@@ -215,44 +175,45 @@ export const initWhatsAppOnLogin = async (adminId: number) => {
   try {
     await client.initialize();
     activeClients.set(sessionId, client);
-    return client;
-  } catch (error: any) {
-    console.error(`❌ Failed to start WhatsApp for Admin ${adminId}:`, error?.message || error);
+  } catch (err: any) {
     sessionStatus.set(String(adminId), "DISCONNECTED");
+  } finally {
+    initializingClients.delete(sessionId); 
   }
+
+  return activeClients.get(sessionId) || null;
 };
 
-export const generateWhatsAppSession = (adminId: string, onQrCode: (qr: string) => void) => {
+// ⭐ 3. GENERATE NEW QR
+export const generateWhatsAppSession = async (adminId: string, onQrCode: (qr: string) => void) => {
+  if (DISABLE_WHATSAPP) {
+    console.log("⚠️ WhatsApp feature is temporarily disabled to save RAM.");
+    return;
+  }
+
   const sessionId = `admin_${adminId}`;
 
   if (activeClients.has(sessionId)) {
-    console.log(`WhatsApp already connected for Admin ID: ${adminId}`);
     sessionStatus.set(adminId, "CONNECTED");
     return;
   }
+  if (initializingClients.has(sessionId)) return;
 
-  // Agar pehle se initialize ho raha hai toh doosra browser mat kholo
-  if (sessionStatus.get(adminId) === "INITIALIZING") {
-    console.log(`⏳ WhatsApp is already initializing for Admin ID: ${adminId}. Please wait.`);
-    return;
+  initializingClients.add(sessionId);
+  sessionStatus.set(adminId, "INITIALIZING");
+
+  const existingClient = activeClients.get(sessionId);
+  if (existingClient) {
+    try { await existingClient.destroy(); } catch (e) {}
+    activeClients.delete(sessionId);
   }
 
-  sessionStatus.set(adminId, "INITIALIZING");
+  cleanLockFile(sessionId);
+  await new Promise(resolve => setTimeout(resolve, 1500)); 
 
   const client = new Client({
     authStrategy: new LocalAuth({ clientId: sessionId }),
-    puppeteer: { 
-      headless: true, 
-      args: [
-        "--no-sandbox", 
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
-        "--no-first-run",
-        "--no-zygote",
-        "--disable-gpu"
-      ] 
-    }
+    puppeteer: { headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-accelerated-2d-canvas", "--disable-gpu"] }
   });
 
   client.on("qr", (qr) => {
@@ -269,161 +230,73 @@ export const generateWhatsAppSession = (adminId: string, onQrCode: (qr: string) 
   });
 
   client.on("disconnected", async () => {
-    console.log(`❌ WhatsApp Disconnected for Admin ID: ${adminId}`);
     sessionStatus.set(adminId, "DISCONNECTED");
     qrCodeData.delete(adminId);
     activeClients.delete(sessionId);
-
-    try {
-      const user = await userRepo.findOne({ where: { id: Number(adminId) } });
-      if (user) {
-        user.whatsappInstanceId = null as any;
-        user.whatsappToken = null as any;
-        await userRepo.save(user);
-      }
-    } catch (err) {
-      console.error("Cleanup error on disconnect:", err);
-    }
-
-    setTimeout(async () => {
-      try {
-        if (client) {
-          await client.destroy();
-        }
-      } catch (err) {}
-    }, 3000);
+    setTimeout(async () => { try { if (client) await client.destroy(); } catch (err) {} }, 2000);
   });
 
   registerMessageListener(client);
 
-  // ⭐ YAHAN FIX KIYA HAI: Add proper catch to prevent Unhandled Rejection
-  client.initialize().catch((err) => {
-    console.error(`❌ Failed to generate session for Admin ${adminId}:`, err?.message || err);
+  try {
+    await client.initialize();
+  } catch (err: any) {
     sessionStatus.set(adminId, "DISCONNECTED");
-  });
+  } finally {
+    initializingClients.delete(sessionId); 
+  }
 };
 
-const getOrRestoreClient = async (adminId: string | number): Promise<Client | null> => {
-  const sessionId = `admin_${adminId}`;
-  let client = activeClients.get(sessionId);
+// ⭐ 4. SUPER ADMIN LOGIN HO TO SARE ADMINS KO CONNECT KARO
+export const initAllSavedSessions = async () => {
+  if (DISABLE_WHATSAPP) return;
 
-  if (!client) {
-    const sessionPath = path.join(process.cwd(), `.wwebjs_auth/session-${sessionId}`);
-    
-    if (fs.existsSync(sessionPath)) {
-      console.log(`⚠️ Client not in memory for Admin ${adminId}. Restoring from disk...`);
-      
-      client = new Client({
-        authStrategy: new LocalAuth({ clientId: sessionId }),
-        puppeteer: { 
-          headless: true, 
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] 
-        }
-      });
+  const authPath = path.join(process.cwd(), ".wwebjs_auth");
+  if (!fs.existsSync(authPath)) return;
 
-      client.on("qr", (qr) => {
-        sessionStatus.set(String(adminId), "QR_READY");
-        qrCodeData.set(String(adminId), qr); 
-      });
-
-      client.on("ready", () => {
-        console.log(`✅ Auto-reconnected WhatsApp for Admin ID: ${adminId}`);
-        sessionStatus.set(String(adminId), "CONNECTED");
-        qrCodeData.delete(String(adminId));
-        activeClients.set(sessionId, client!);
-      });
-
-      client.on("disconnected", async () => {
-        console.log(`❌ WhatsApp Disconnected for Admin ID: ${adminId}`);
-        sessionStatus.set(String(adminId), "DISCONNECTED");
-        qrCodeData.delete(String(adminId));
-        activeClients.delete(sessionId);
-
-        try {
-          const user = await userRepo.findOne({ where: { id: Number(adminId) } });
-          if (user) {
-            user.whatsappInstanceId = null as any;
-            user.whatsappToken = null as any;
-            await userRepo.save(user);
-          }
-        } catch (err) {}
-
-        setTimeout(async () => {
-          try {
-            if (client) {
-              await client.destroy();
-            }
-          } catch (err) {}
-        }, 3000);
-      });
-
-      registerMessageListener(client);
-
-      // ⭐ YAHAN BHI FIX KIYA HAI
-      client.initialize().catch((err) => {
-        console.error(`❌ Failed to restore session for Admin ${adminId}:`, err?.message || err);
-        sessionStatus.set(String(adminId), "DISCONNECTED");
-      });
-
-      activeClients.set(sessionId, client);
-      
-      await new Promise(resolve => setTimeout(resolve, 4000));
-    } else {
-      return null;
+  const folders = fs.readdirSync(authPath);
+  for (const folder of folders) {
+    if (folder.startsWith("session-admin_")) {
+      const adminId = folder.split("_")[1];
+      console.log(`🚀 Found existing session for Admin ${adminId}, attempting auto-connect...`);
+      getOrRestoreClient(adminId).catch(() => {});
     }
   }
-  return client;
+};
+
+export const initWhatsAppOnLogin = async (adminId: number) => {
+  if (DISABLE_WHATSAPP) return null;
+  return await getOrRestoreClient(adminId);
 };
 
 export const getAdminClient = async (adminId: number) => {
+  if (DISABLE_WHATSAPP) return null;
   return await getOrRestoreClient(adminId);
 };
 
 export const sendAdminMessage = async (adminId: string | number, toPhone: string, message: string) => {
+  if (DISABLE_WHATSAPP) return false;
+
   try {
     const client = await getOrRestoreClient(adminId);
-    if (!client) {
-      console.log(`❌ WhatsApp is NOT connected for Admin ${adminId}. Message skipped.`);
-      return false;
-    }
-
+    if (!client) return false;
     let cleanPhone = toPhone.replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-    const formattedPhone = `${cleanPhone}@c.us`; 
-
-    await client.sendMessage(formattedPhone, message);
-    console.log(`✅ Message sent to ${formattedPhone}`);
+    await client.sendMessage(`${cleanPhone}@c.us`, message);
     return true;
-  } catch (error) {
-    console.error(`❌ Failed to send message to ${toPhone}:`, error);
-    return false;
-  }
+  } catch (error) { return false; }
 };
 
 export const sendAdminDocument = async (adminId: string | number, toPhone: string, filePath: string, caption: string) => {
+  if (DISABLE_WHATSAPP) return false;
+
   try {
     const client = await getOrRestoreClient(adminId);
-    if (!client) {
-      console.log(`❌ WhatsApp is NOT connected for Admin ${adminId}. PDF not sent.`);
-      return false;
-    }
-
+    if (!client) return false;
     let cleanPhone = toPhone.replace(/\D/g, "");
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-    const formattedPhone = `${cleanPhone}@c.us`; 
-
-    const fileBuffer = fs.readFileSync(filePath);
-    const base64Data = fileBuffer.toString("base64");
-    const fileName = path.basename(filePath);
-
-    const media = new MessageMedia("application/pdf", base64Data, fileName);
-
-    await client.sendMessage(formattedPhone, media, { caption: caption });
-    
-    console.log(`✅ PDF Document sent successfully to ${formattedPhone}`);
+    const media = new MessageMedia("application/pdf", fs.readFileSync(filePath).toString("base64"), path.basename(filePath));
+    await client.sendMessage(`${cleanPhone}@c.us`, media, { caption: caption });
     return true;
-  } catch (error) {
-    console.error(`❌ Failed to send PDF to ${toPhone}:`, error);
-    return false;
-  }
+  } catch (error) { return false; }
 };
