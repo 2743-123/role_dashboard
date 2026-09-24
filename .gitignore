@@ -1,3 +1,10 @@
 node_modules
 dist
 .env
+.wwebjs_auth/
+# Database Backups folder ko ignore karne ke liye
+backups/
+
+# WhatsApp/Puppeteer cache html files ko ignore karne ke liye
+*.html
+google-credentials.json

@@ -4,15 +4,18 @@ import { AppDataSource } from "../config/db";
 import { BedashMessage } from "../models/bedashMessage";
 import { User } from "../models/User";
 import { MaterialAccount } from "../models/materialaccount";
-import axios from "axios";
+import { sendAdminMessage } from "../services/whatsappService"; 
 
 const bedashRepo = AppDataSource.getRepository(BedashMessage);
 const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
+// ⏱ Helper function: WhatsApp ban se bachne ke liye delay
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const initBedashScheduler = () => {
   // 🕒 3:00 PM (15:00) aur 4:00 PM (16:00) ke liye set
-  cron.schedule("0 15,16 * * *", async () => {
+  cron.schedule("56 14 * * *", async () => {
     try {
       console.log("⏰ Running Scheduled Bedash WhatsApp Reminder Task...");
 
@@ -24,38 +27,42 @@ export const initBedashScheduler = () => {
         ]
       });
 
-      // 2. Har Admin ke liye loop chalayein
+      // 2. Har Admin/Superadmin ke liye loop chalayein
       for (const admin of admins) {
+        
+        // ⭐ FIX 1: Superadmin sees all, Admin sees self + own users
+        const whereConditions = admin.role === "superadmin" 
+          ? { status: "pending" } 
+          : [
+              { status: "pending", user: { creator: { id: admin.id } } }, // Users created by Admin
+              { status: "pending", user: { id: admin.id } }               // Admin's own records
+            ];
+
         const pendingBedashes = await bedashRepo.find({
-          where: {
-            status: "pending",
-            user: { creator: { id: admin.id } } // Admin ke users filter
-          },
+          where: whereConditions as any,
           relations: ["user"],
           order: { targetDate: "ASC" }, 
         });
 
         if (pendingBedashes.length === 0) {
-          console.log(`ℹ️ No pending bedash for Admin: ${admin.name}. Skipping message.`);
+          console.log(`ℹ️ No pending bedash for ${admin.role.toUpperCase()}: ${admin.name}. Skipping.`);
           continue;
         }
 
-        // Batch Fetching: In sabhi users ke Material Accounts ek sath nikal lein
+        // Batch Fetching: Accounts
         const userIds = [...new Set(pendingBedashes.map(b => b.user.id))];
         const accounts = await accountRepo.find({
           where: { user: { id: In(userIds) } },
           relations: ["user"]
         });
 
-        const instanceId = admin.whatsappInstanceId;
-        const token = admin.whatsappToken;
+        const adminId = admin.id; 
 
         // 🟢 3. Admin ka Message Format tayar karein
         let adminMessageText = `📋 *Scheduled Bedash Report* 📋\n\n`;
-        adminMessageText += `Hello *${admin.name}*,\nHere are the pending records for your users:\n\n`;
+        adminMessageText += `Hello *${admin.name}*,\nHere are the pending records:\n\n`;
         let adminIndex = 1;
 
-        // Customers ke records unke number ke hisaab se group karne ke liye Map banayenge
         const customerTasksMap = new Map<string, any[]>();
 
         for (const b of pendingBedashes) {
@@ -64,7 +71,7 @@ export const initBedashScheduler = () => {
           );
           const remainingTons = userAccount ? Number(userAccount.remainingTons).toFixed(3) : "0.000";
 
-          // 👉 3a. Admin ke message me sabhi (eg. 4) items add honge
+          // Admin message string
           adminMessageText += `${adminIndex}. User: *${b.user?.name}*\n` +
             `   - Material: ${b.materialType}\n` +
             `   - Amount: ${b.amount}\n` +
@@ -72,8 +79,8 @@ export const initBedashScheduler = () => {
             `   - ⚖️ Remaining: *${remainingTons} Tons*\n\n`; 
           adminIndex++;
 
-          // 👉 3b. Customer ka record uske number ke aage save karein
-          if (b.reminderPhone) {
+          // Customer mapping
+          if (b.reminderPhone && b.reminderPhone.trim() !== "") {
             const phone = b.reminderPhone.trim();
             if (!customerTasksMap.has(phone)) {
               customerTasksMap.set(phone, []);
@@ -93,50 +100,40 @@ export const initBedashScheduler = () => {
         // 4. Messages Send Karne Ki Baari
         
         // 👉 A. Admin ko Final List bhejein
-        const adminPhone = admin.phone; 
-        if (adminPhone && instanceId && token) {
+        if (admin.phone) {
           try {
-            await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
-              token: token,
-              to: adminPhone,
-              body: adminMessageText,
-            });
-            console.log(`✅ Full Bedash report sent to Admin: ${adminPhone}`);
+            await sendAdminMessage(adminId, admin.phone, adminMessageText);
+            console.log(`✅ Full Bedash report sent to ${admin.role}: ${admin.phone}`);
           } catch (waErr) {
-            console.error(`❌ Admin WhatsApp delivery failed for: ${adminPhone}`, waErr);
+            console.error(`❌ ${admin.role} WhatsApp delivery failed for: ${admin.phone}`, waErr);
           }
         }
 
-        // 👉 B. Har Customer ko EXACT SAME FORMAT me uske (eg. 3) records bhejein
-        if (instanceId && token) {
-          for (const [phone, tasks] of customerTasksMap.entries()) {
-            
-            // 🟢 YAHAN CHANGE KIYA HAI: Hello *User* permanent kar diya gaya hai
-            let customerMsg = `📋 *Scheduled Bedash Report* 📋\n\n`;
-            customerMsg += `Hello *User*,\nHere are the pending records:\n\n`;
-            
-            let custIndex = 1;
-            for (const task of tasks) {
-              customerMsg += `${custIndex}. User: *${task.userName}*\n` +
-                `   - Material: ${task.materialType}\n` +
-                `   - Amount: ${task.amount}\n` +
-                `   - Target Date: ${task.targetDate}\n` +
-                `   - ⚖️ Remaining: *${task.remainingTons} Tons*\n\n`;
-              custIndex++;
-            }
-            customerMsg += `- Bricks Admin System`;
+        // 👉 B. Har Customer ko records bhejein
+        for (const [phone, tasks] of customerTasksMap.entries()) {
+          let customerMsg = `📋 *Scheduled Bedash Report* 📋\n\n`;
+          customerMsg += `Hello *User*,\nHere are the pending records:\n\n`;
+          
+          let custIndex = 1;
+          for (const task of tasks) {
+            customerMsg += `${custIndex}. User: *${task.userName}*\n` +
+              `   - Material: ${task.materialType}\n` +
+              `   - Amount: ${task.amount}\n` +
+              `   - Target Date: ${task.targetDate}\n` +
+              `   - ⚖️ Remaining: *${task.remainingTons} Tons*\n\n`;
+            custIndex++;
+          }
+          customerMsg += `- Bricks Admin System`;
 
-            // Customer ko send karein
-            try {
-              await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
-                token: token,
-                to: phone,
-                body: customerMsg,
-              });
-              console.log(`✅ Personal Bedash report sent to Customer: ${phone}`);
-            } catch (err) {
-              console.error(`❌ Customer WhatsApp delivery failed for: ${phone}`);
-            }
+          try {
+            await sendAdminMessage(adminId, phone, customerMsg);
+            console.log(`✅ Personal Bedash report sent to Customer: ${phone}`);
+            
+            // ⭐ FIX 2: Delay of 1.5 seconds to prevent WhatsApp ban/rate limits
+            await sleep(1500); 
+
+          } catch (err) {
+            console.error(`❌ Customer WhatsApp delivery failed for: ${phone}`);
           }
         }
 

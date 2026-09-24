@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config(); // 👈 Sabse pehle env variables load hone chahiye
+import cron from "node-cron";
 
 import "reflect-metadata";
 import compression from "compression";
@@ -19,9 +20,11 @@ import webhookRoutes from "./routes/webhookRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
 import backupRoutes from "./routes/backupRoutes";
 import aiRoutes from "./routes/aiRoutes";
+import whatsappRoutes from "./routes/whatsappRoutes";
 
 // Cron Service
 import { initBedashScheduler } from "./services/cronService";
+import { performDatabaseBackup } from "./services/backupService";
 
 const app = express();
 
@@ -59,6 +62,7 @@ app.use("/api/payment-history", paymentRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api", webhookRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 // 6. Database & Server Initialization
 const PORT = process.env.PORT || 5000;
@@ -67,10 +71,15 @@ AppDataSource.initialize()
   .then(() => {
     console.log("Database connected");
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    cron.schedule("0 */3 * * *", async () => {
+  console.log("⏰ Running Scheduled Auto-Backup...");
+  await performDatabaseBackup();
+});
     
     // Scheduler init
     initBedashScheduler();
   })
+  
   .catch((err) => {
     console.error("Database connection error", err);
     process.exit(1);

@@ -19,46 +19,94 @@ export class Token {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  // ⚡ Index: Customer Name se fast search ke liye
   @Index()
   @Column("varchar")
   customerName!: string;
 
-  // ⚡ Index: Truck Number se fast search ke liye
   @Index()
   @Column("varchar", { nullable: true })
   truckNumber!: string;
 
-  // ⚡ Index & Type Fix: Overload error bypass kiya aur indexing lagai
   @Index()
   @Column("varchar")
   materialType!: "flyash" | "bedash";
 
-  // 🛠️ Type Fix: Numeric types ko string argument bana diya
-  @Column("numeric", { precision: 12, scale: 3, default: 0, transformer: numericTransformer })
-  weight!: number; // Scale 3 for tons (e.g., 15.500)
+  // ==========================================
+  // 🟢 BEDASH SPECIFIC FIELDS (Naye Add Kiye)
+  // ==========================================
+  @Index()
+  @Column("varchar", { nullable: true })
+  cartingOwnerName!: string | null;
+
+  @Column("varchar", { length: 15, nullable: true })
+  cartingOwnerPhone!: string | null;
+
+  @Column("varchar", { default: "owner" }) // "owner" | "another"
+  tokenOwnerType!: "owner" | "another";
+
+  @Index()
+  @Column("varchar", { nullable: true })
+  anotherTokenOwnerName!: string | null;
+
+  @Column("varchar", { length: 15, nullable: true })
+  anotherTokenOwnerPhone!: string | null;
+
+  // ==========================================
+  // 🟢 RATES & AMOUNTS (BEDASH MATH)
+  // ==========================================
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  sellRate!: number; // Customer ko jo rate diya
 
   @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
-  ratePerTon!: number;
+  cartingRate!: number; // Carting wale ka rate
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  totalCarting!: number; // cartingRate * weight
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  tokenOwnerRate!: number; // Another owner ka rate
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  totalTokenOwnerAmount!: number; // tokenOwnerRate * weight
+
+  // ==========================================
+  // 🟢 PAYMENTS & CARRY FORWARD (TRIPLE LEDGER)
+  // ==========================================
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  cartingPaidAmount!: number;
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  cartingCarryForward!: number; 
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  tokenOwnerPaidAmount!: number;
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  tokenOwnerCarryForward!: number; 
+
+  // Standard Fields
+  @Column("numeric", { precision: 12, scale: 3, default: 0, transformer: numericTransformer })
+  weight!: number; 
+
+  @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
+  ratePerTon!: number; // Flyash ke liye
 
   @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
   commission!: number;
 
   @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
-  totalAmount!: number;
+  totalAmount!: number; // Total Customer Bill
 
   @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
-  paidAmount!: number;
+  paidAmount!: number; // Customer ne kitna pay kiya
 
   @Column("numeric", { precision: 12, scale: 2, default: 0, transformer: numericTransformer })
-  carryForward!: number;
+  carryForward!: number; // Customer Ledger
 
-  // ⚡ Index & Type Fix: Sirf "pending" tokens fast nikalne ke liye
   @Index()
   @Column("varchar", { default: "pending" })
   status!: "pending" | "updated" | "completed";
 
-  // ⚡ Index: Date filtering aur sorting ko fast karne ke liye
   @Index()
   @CreateDateColumn()
   createdAt!: Date;
@@ -69,13 +117,12 @@ export class Token {
   @Column("timestamp", { nullable: true })
   confirmedAt!: Date | null;
 
-  // ⚡ Index: Phone number se customer history nikalne ke liye
   @Index()
   @Column("varchar", { length: 15, nullable: true })
   customerPhone!: string;
 
   @ManyToOne(() => User, (user) => user.tokens, {
-    onDelete: "CASCADE", // 👈 Deletes token if user is deleted
+    onDelete: "CASCADE", 
     onUpdate: "CASCADE",
   })
   user!: User;

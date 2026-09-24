@@ -10,10 +10,8 @@ const bedashRepo = AppDataSource.getRepository(BedashMessage);
 const userRepo = AppDataSource.getRepository(User);
 const accountRepo = AppDataSource.getRepository(MaterialAccount);
 
-// ✅ CREATE BEDASH ENTRY (Updated for User Access & Reminder Phone)
 export const createBedash = async (req: Request, res: Response) => {
   try {
-    // 🟢 reminderPhone ko req.body me add kiya gaya hai
     const { userId, materialType, customDate, targetDate, amount, reminderPhone } = req.body;
     const currentUser = (req as any).user;
 
@@ -27,18 +25,31 @@ export const createBedash = async (req: Request, res: Response) => {
 
     // 2: Role-based Security Validation
     if (currentUser.role === "user") {
-      // User khud ke alawa kisi aur ki entry nahi bana sakta
       if (currentUser.id !== user.id) {
         return res.status(403).json({ msg: "❌ You can only create requests for yourself" });
       }
     } else if (currentUser.role === "admin") {
-      // Admin sirf apne assign kiye hue users ki entry bana sakta hai
       if (user.creator?.id !== currentUser.id) {
         return res.status(403).json({ msg: "❌ Access Denied: Not your user" });
       }
     }
-    // SuperAdmin ke liye koi restriction nahi hai
 
+   
+    const existingPendingBedash = await bedashRepo.findOne({
+      where: {
+        user: { id: user.id },
+        status: "pending",
+        materialType: materialType as "flyash" | "bedash" // Optional: Sirf same material ke liye rokna hai toh ye rakho. Warna is line ko hata doge toh dono materials pe rok lag jayegi.
+      }
+    });
+
+    if (existingPendingBedash) {
+      return res.status(400).json({ 
+        msg: `❌ already added ${materialType}` 
+      });
+    }
+
+    // 4: Create naya Bedash message
     const bedash = bedashRepo.create({
       user,
       createdBy: { id: currentUser.id } as any,
@@ -47,7 +58,7 @@ export const createBedash = async (req: Request, res: Response) => {
       targetDate,
       status: "pending",
       amount,
-      reminderPhone: reminderPhone || null, // 🟢 Database me save karega (agar diya hai)
+      reminderPhone: reminderPhone || null, 
     });
 
     await bedashRepo.save(bedash);

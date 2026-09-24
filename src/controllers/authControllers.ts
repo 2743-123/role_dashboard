@@ -5,6 +5,7 @@ import { AppDataSource } from "../config/db";
 import { User } from "../models/User";
 import { logger } from "../config/logger";
 import { BlacklistToken } from "../models/BlackListToken";
+import { initWhatsAppOnLogin } from "../services/whatsappService";
 
 // Interface for type safety (if you use it in middleware, otherwise optional here)
 export interface AuthenticatedRequest extends Request {
@@ -170,6 +171,11 @@ export const login = async (req: Request, res: Response) => {
     );
 
     res.status(200).json({ token });
+
+    if (user.role === "admin" || user.role === "superadmin") {
+      // Isko await karne ki zaroorat nahi hai, yeh background me connect hota rahega
+      initWhatsAppOnLogin(user.id).catch(err => console.error("WhatsApp auto-init failed", err));
+    }
     logger.info(`Login success: ${email}, role: ${user.role}`);
   } catch (err: any) {
     logger.error(`Login error for ${req.body?.email}: ${err.message}`);

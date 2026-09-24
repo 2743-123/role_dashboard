@@ -37,7 +37,6 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
           const customerName = matchingToken.customerName;
           const assignedUser = matchingToken.user; 
 
-          // Saare tokens nikal lein is customer ke liye
           const customerTokens = await tokenRepo.createQueryBuilder("token")
             .where("token.customerPhone = :phone OR token.customerPhone = :plusPhone", {
               phone: senderPhone,
@@ -51,6 +50,8 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
           });
 
           const adminUser = assignedUser.role === "user" ? assignedUser.creator : assignedUser;
+          // ⭐ Admin ID extract karein (Free WhatsApp ke liye)
+          const adminId = adminUser?.id || assignedUser.id;
 
           const reportUser = {
             id: assignedUser.id,
@@ -58,9 +59,9 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
             email: assignedUser.email || "customer@bricks.com",
           };
 
+          // ⭐ Naya Free WhatsApp Admin ID parameter pass kiya gaya hai
           await generateAndSendUserReportPDF(reportUser, customerTokens, accounts, {
-            instanceId: (adminUser as any)?.whatsappInstanceId,
-            token: (adminUser as any)?.whatsappToken,
+            adminId: adminId,
             phone: senderPhone,
           });
 
@@ -87,10 +88,12 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
             });
 
             const adminUser = user.role === "user" ? user.creator : user;
+            // ⭐ Admin ID extract karein
+            const adminId = adminUser?.id || user.id;
 
+            // ⭐ Naya Free WhatsApp Admin ID parameter pass kiya gaya hai
             await generateAndSendUserReportPDF(user, tokens, accounts, {
-              instanceId: (adminUser as any)?.whatsappInstanceId,
-              token: (adminUser as any)?.whatsappToken,
+              adminId: adminId,
               phone: senderPhone,
             });
 

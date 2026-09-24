@@ -10,41 +10,18 @@ import { BedashMessage } from "../models/bedashMessage";
 import { PaymentHistory } from "../models/PaymentHistory";
 dotenv.config();
 
-// export const AppDataSource = new DataSource({
-//   type: "postgres",
-//   // host: "localhost",
-//   // username: "dashboard_user",
-//   // password: "As2743@123",
-//   // database: "admin_dashboard",
-//   url: process.env.DATABASE_URL,
-//   schema: "public",
-
-//   synchronize: true,
-//   ssl: { rejectUnauthorized: false },
-//   logging: false,
-//   entities: [
-//     User,
-//     BlacklistToken,
-//     MaterialAccount,
-//     Token,
-//     Transaction,
-//     BedashMessage,
-//     PaymentHistory,
-
-//   ],
-// });
-// console.log("URL", process.env.DATABASE_URL);
 export const AppDataSource = new DataSource({
   type: "postgres",
+  // host: "localhost",
+  // username: "dashboard_user",
+  // password: "As2743@123",
+  // database: "admin_dashboard",
   url: process.env.DATABASE_URL,
   schema: "public",
+
   synchronize: true,
+  ssl: { rejectUnauthorized: false },
   logging: false,
-  extra: {
-    ssl: {
-      rejectUnauthorized: false
-    }
-  },
   entities: [
     User,
     BlacklistToken,
@@ -53,5 +30,28 @@ export const AppDataSource = new DataSource({
     Transaction,
     BedashMessage,
     PaymentHistory,
+
   ],
 });
+console.log("URL", process.env.DATABASE_URL);
+// export const AppDataSource = new DataSource({
+//   type: "postgres",
+//   url: process.env.DATABASE_URL,
+//   schema: "public",
+//   synchronize: true,
+//   logging: false,
+//   extra: {
+//     ssl: {
+//       rejectUnauthorized: false
+//     }
+//   },
+//   entities: [
+//     User,
+//     BlacklistToken,
+//     MaterialAccount,
+//     Token,
+//     Transaction,
+//     BedashMessage,
+//     PaymentHistory,
+//   ],
+// });

@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../config/db";
-import { In } from "typeorm";
+import { In, Brackets } from "typeorm";
 
 import { MaterialAccount } from "../models/materialaccount";
 import { User } from "../models/User";
 import { Token } from "../models/Token";
 import { PaymentHistory } from "../models/PaymentHistory";
-import { sendWhatsAppReceipt } from "../services/whatsappService";
+import { sendWhatsAppReceipt } from "../services/whatappSendServices";
 import { generateAndSendUserReportPDF } from "../services/whatappSendServices";
 
 const tokenRepo = AppDataSource.getRepository(Token);
@@ -26,7 +26,6 @@ const calculateAvailableTokens = async (userId: number, materialType: string) =>
 
   const actualRemainingTons = account ? Number(account.remainingTons || 0) : 0;
 
-  // Dealer ki jitni bhi pending tokens hain unhe count karein
   const pendingCount = await tokenRepo.count({
     where: {
       user: { id: userId },
@@ -35,11 +34,8 @@ const calculateAvailableTokens = async (userId: number, materialType: string) =>
     },
   });
 
-  // Har pending token aasre 27 tons block karti hai
   const reservedTons = pendingCount * TRUCK_CAPACITY;
   const effectiveRemainingTons = Math.max(0, actualRemainingTons - reservedTons);
-
-  // Bachi hui available token capacity
   const tokensAvailable = Math.max(0, Math.floor(effectiveRemainingTons / TRUCK_CAPACITY));
 
   return {
@@ -165,49 +161,158 @@ const buildAllCustomersTokensForDealer = async (
 };
 
 // ==========================================
-// 1. CREATE TOKEN
+// 🧠 SMART RE-BALANCER & STATUS ENGINE
+// ==========================================
+const syncLedgersAndStatuses = async (token: Token, adminId: number) => {
+  const safeAdminId = adminId ?? 0;
+
+  const balanceType = async (type: "customer" | "carting" | "tokenOwner", name: string | null | undefined) => {
+    if (!name) return;
+    
+    let query = tokenRepo.createQueryBuilder("t").leftJoinAndSelect("t.user", "u").leftJoin("u.creator", "c")
+      .where("(c.id = :adminId OR u.id = :adminId)", { adminId: safeAdminId }).orderBy("t.id", "ASC");
+        
+    if (type === "customer") query = query.andWhere("t.customerName = :name", { name });
+    if (type === "carting") query = query.andWhere("t.cartingOwnerName = :name", { name });
+    if (type === "tokenOwner") query = query.andWhere("t.anotherTokenOwnerName = :name", { name });
+
+    const tokens = await query.getMany();
+    if (!tokens.length) return;
+
+    let totalPool = 0;
+    for (const t of tokens) {
+      if (type === "customer") totalPool += Number(t.paidAmount || 0);
+      if (type === "carting") totalPool += Number(t.cartingPaidAmount || 0);
+      if (type === "tokenOwner") totalPool += Number(t.tokenOwnerPaidAmount || 0);
+    }
+
+    let carry = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      let bill = 0;
+      
+      if (type === "customer") bill = Number(t.totalAmount || 0);
+      if (type === "carting") bill = Number(t.totalCarting || 0);
+      if (type === "tokenOwner") bill = Number(t.totalTokenOwnerAmount || 0);
+
+      const payNow = Math.min(bill, totalPool);
+      let newPaid = payNow;
+      totalPool -= payNow;
+
+      if (i === tokens.length - 1 && totalPool > 0) {
+        newPaid += totalPool;
+        totalPool = 0;
+      }
+
+      if (type === "customer") {
+        t.paidAmount = newPaid;
+        carry = Number((carry + newPaid - bill).toFixed(2));
+        t.carryForward = carry;
+      }
+      if (type === "carting") {
+        t.cartingPaidAmount = newPaid;
+        carry = Number((carry + bill - newPaid).toFixed(2));
+        t.cartingCarryForward = carry;
+      }
+      if (type === "tokenOwner") {
+        t.tokenOwnerPaidAmount = newPaid;
+        carry = Number((carry + bill - newPaid).toFixed(2));
+        t.tokenOwnerCarryForward = carry;
+      }
+    }
+    await tokenRepo.save(tokens);
+  };
+
+  await balanceType("customer", token.customerName);
+  await balanceType("carting", token.cartingOwnerName);
+  await balanceType("tokenOwner", token.anotherTokenOwnerName);
+
+  const affectedTokens = await tokenRepo.createQueryBuilder("t").leftJoinAndSelect("t.user", "u").leftJoin("u.creator", "c")
+    .where("(c.id = :adminId OR u.id = :adminId)", { adminId: safeAdminId })
+    .andWhere(new Brackets(qb => {
+      qb.where("t.customerName = :cust", { cust: token.customerName });
+      if (token.cartingOwnerName) qb.orWhere("t.cartingOwnerName = :cart", { cart: token.cartingOwnerName });
+      if (token.anotherTokenOwnerName) qb.orWhere("t.anotherTokenOwnerName = :own", { own: token.anotherTokenOwnerName });
+    }))
+    .getMany();
+
+  for (const t of affectedTokens) {
+    if (t.materialType === "bedash") {
+        if (!t.cartingOwnerName) {
+            t.cartingCarryForward = Number((Number(t.totalCarting || 0) - Number(t.cartingPaidAmount || 0)).toFixed(2));
+        }
+        if (!t.anotherTokenOwnerName && t.tokenOwnerType === "another") {
+            t.tokenOwnerCarryForward = Number((Number(t.totalTokenOwnerAmount || 0) - Number(t.tokenOwnerPaidAmount || 0)).toFixed(2));
+        }
+    }
+
+    if (Number(t.totalAmount || 0) > 0) {
+      const isCust = Number(t.totalAmount || 0) === 0 || Number(t.paidAmount) >= Number(t.totalAmount) || Number(t.carryForward) >= 0;
+      const isCart = t.materialType !== "bedash" || Number(t.totalCarting || 0) === 0 || Number(t.cartingPaidAmount) >= Number(t.totalCarting) || Number(t.cartingCarryForward || 0) <= 0;
+      const isOwn = t.materialType !== "bedash" || Number(t.totalTokenOwnerAmount || 0) === 0 || Number(t.tokenOwnerPaidAmount) >= Number(t.totalTokenOwnerAmount) || Number(t.tokenOwnerCarryForward || 0) <= 0;
+      
+      if (isCust && isCart && isOwn && t.confirmedAt != null) {
+        t.status = "completed";
+      } else if (t.status !== "pending") {
+        t.status = "updated";
+      }
+    }
+  }
+  await tokenRepo.save(affectedTokens);
+};
+
+// ==========================================
+// 1. CREATE TOKEN 
 // ==========================================
 export const createToken = async (req: Request, res: Response) => {
   try {
-    const { customerName, customerPhone, materialType, userId } = req.body;
+    const { 
+      customerName, customerPhone, materialType, userId,
+      cartingOwnerName, cartingOwnerPhone, tokenOwnerType, 
+      anotherTokenOwnerName, anotherTokenOwnerPhone 
+    } = req.body;
 
     const user = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
     const adminUser = user.role === "user" ? user.creator : user;
-    const adminId = adminUser?.id;
+    const adminId = adminUser?.id ?? 0;
     const adminPhone = (adminUser as any)?.phone;
-    const waInstance = (adminUser as any)?.whatsappInstanceId;
-    const waToken = (adminUser as any)?.whatsappToken;
 
-    const lastToken = await tokenRepo
-      .createQueryBuilder("t")
-      .leftJoin("t.user", "u")
-      .leftJoin("u.creator", "c")
-      .where("t.customerName = :customerName", { customerName })
-      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
-      .orderBy("t.id", "DESC")
-      .getOne();
-
+    const lastToken = await tokenRepo.createQueryBuilder("t").leftJoin("t.user", "u").leftJoin("u.creator", "c")
+      .where("t.customerName = :customerName", { customerName }).andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+      .orderBy("t.id", "DESC").getOne();
     const prevCarry = lastToken ? Number(lastToken.carryForward || 0) : 0;
 
+    let prevCartingCarry = 0;
+    if (materialType === "bedash" && cartingOwnerName) {
+      const lastCarting = await tokenRepo.createQueryBuilder("t").leftJoin("t.user", "u").leftJoin("u.creator", "c")
+        .where("t.cartingOwnerName = :cartingOwnerName", { cartingOwnerName }).andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+        .orderBy("t.id", "DESC").getOne();
+      prevCartingCarry = lastCarting ? Number(lastCarting.cartingCarryForward || 0) : 0;
+    }
+
+    let prevTokenOwnerCarry = 0;
+    if (materialType === "bedash" && tokenOwnerType === "another" && anotherTokenOwnerName) {
+      const lastOwner = await tokenRepo.createQueryBuilder("t").leftJoin("t.user", "u").leftJoin("u.creator", "c")
+        .where("t.anotherTokenOwnerName = :anotherTokenOwnerName", { anotherTokenOwnerName }).andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+        .orderBy("t.id", "DESC").getOne();
+      prevTokenOwnerCarry = lastOwner ? Number(lastOwner.tokenOwnerCarryForward || 0) : 0;
+    }
+
     const token = tokenRepo.create({
-      customerName,
-      customerPhone,
-      materialType,
-      user,
-      status: "pending",
-      carryForward: prevCarry,
-      paidAmount: 0,
-      truckNumber: undefined,
-      weight: 0,
-      commission: 0,
-      totalAmount: 0,
+      customerName, customerPhone, materialType, user, status: "pending",
+      carryForward: prevCarry, paidAmount: 0, totalAmount: 0, weight: 0, commission: 0,
+      cartingOwnerName: materialType === "bedash" ? cartingOwnerName : null,
+      cartingOwnerPhone: materialType === "bedash" ? cartingOwnerPhone : null,
+      tokenOwnerType: materialType === "bedash" ? (tokenOwnerType || "owner") : "owner",
+      anotherTokenOwnerName: materialType === "bedash" && tokenOwnerType === "another" ? anotherTokenOwnerName : null,
+      anotherTokenOwnerPhone: materialType === "bedash" && tokenOwnerType === "another" ? anotherTokenOwnerPhone : null,
+      cartingCarryForward: prevCartingCarry,
+      tokenOwnerCarryForward: prevTokenOwnerCarry,
     });
 
     await tokenRepo.save(token);
-
-    // Dynamic token count calculate karein (Sirf Admin ke liye)
     const tokenInfo = await calculateAvailableTokens(user.id, token.materialType);
 
     (async () => {
@@ -216,48 +321,20 @@ export const createToken = async (req: Request, res: Response) => {
           ? `₹${Math.abs(token.carryForward)} (TOTAL DUE / BAKI)` 
           : `₹${token.carryForward} (TOTAL ADVANCE)`;
 
-        // 1. Customer ko message
         if (token.customerPhone) {
-          const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(
-            customerName,
-            adminId,
-            token.id
-          );
-
+          const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(customerName, adminId, token.id);
           const custMsg =
-            `🎉 *Token Generated Successfully!* 🎉\n\n` +
-            `👤 Customer: *${token.customerName}*\n` +
-            `🎫 *Token ID:* #${token.id}\n` +
-            `📅 Date: ${new Date().toLocaleDateString("en-GB")}\n` +
-            `👤 Issued Dealer: *${user.name}*\n` +
-            `📦 Material: *${token.materialType.toUpperCase()}*\n` +
-            `⏳ Status: *PENDING* (Loading Awaited)\n\n` +
-            `📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n` +
-            `👉 *${carryText}*\n` +
-            allDealersTokensSummary +
-            `\nThank you for doing business with us! - Bricks Admin`;
-
-          await sendWhatsAppReceipt(token.customerPhone, custMsg, waInstance, waToken);
+            `🎉 *Token Generated Successfully!* 🎉\n\n👤 Customer: *${token.customerName}*\n🎫 *Token ID:* #${token.id}\n📅 Date: ${new Date().toLocaleDateString("en-GB")}\n👤 Issued Dealer: *${user.name}*\n📦 Material: *${token.materialType.toUpperCase()}*\n⏳ Status: *PENDING* (Loading Awaited)\n\n📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n👉 *${carryText}*\n` + allDealersTokensSummary + `\nThank you for doing business with us! - Bricks Admin`;
+          
+          await sendWhatsAppReceipt(token.customerPhone, custMsg, adminId);
         }
 
-        // 2. Admin Alert
         if (adminPhone) {
           const allDealerCustomersReport = await buildAllCustomersTokensForDealer(user.id);
-
           const adminAlertMsg =
-            `🔔 *Admin Alert: New Token Created* 🔔\n\n` +
-            `👤 Dealer/User: *${user.name}*\n` +
-            `👤 New Token Customer: *${token.customerName}*\n` +
-            `🎫 Token ID: *#${token.id}*\n` +
-            `📦 Material: *${token.materialType.toUpperCase()}*\n` +
-            `• Actual Remaining Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n` +
-            `• Pending Trucks Reserved: *${tokenInfo.reservedTons} Tons* (${tokenInfo.pendingCount} trucks × 27T)\n` +
-            `• 🎫 *Tokens Still Available to Issue:* *${tokenInfo.tokensAvailable} Tokens*\n` +
-            `🔄 Customer Final Net Balance: *${carryText}*\n` +
-            allDealerCustomersReport +
-            `- Bricks Admin Automated System`;
-
-          await sendWhatsAppReceipt(adminPhone, adminAlertMsg, waInstance, waToken);
+            `🔔 *Admin Alert: New Token Created* 🔔\n\n👤 Dealer/User: *${user.name}*\n👤 New Token Customer: *${token.customerName}*\n🎫 Token ID: *#${token.id}*\n📦 Material: *${token.materialType.toUpperCase()}*\n• Actual Remaining Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n• Pending Trucks Reserved: *${tokenInfo.reservedTons} Tons*\n• 🎫 *Tokens Still Available:* *${tokenInfo.tokensAvailable} Tokens*\n🔄 Customer Final Balance: *${carryText}*\n` + allDealerCustomersReport + `- Bricks Admin Automated System`;
+          
+          await sendWhatsAppReceipt(adminPhone, adminAlertMsg, adminId);
         }
       } catch (err) {
         console.error("WhatsApp delivery failed on create token:", err);
@@ -276,7 +353,7 @@ export const createToken = async (req: Request, res: Response) => {
 // ==========================================
 export const updateToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, userId, truckNumber, weight, commission, totalAmount, manualDate } = req.body;
+    const { tokenId, userId, truckNumber, weight, commission, totalAmount, manualDate, sellRate, cartingRate, tokenOwnerRate } = req.body;
     const currentUser = (req as any).user;
 
     const token = await tokenRepo.findOne({
@@ -286,13 +363,8 @@ export const updateToken = async (req: Request, res: Response) => {
 
     if (!token) return res.status(404).json({ msg: "Token not found" });
 
-    if (currentUser.role === "user" && currentUser.id !== token.user.id) {
-      return res.status(403).json({ msg: "Access denied" });
-    }
-
-    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
-      return res.status(403).json({ msg: "Access denied: Not your user's token" });
-    }
+    if (currentUser.role === "user" && currentUser.id !== token.user.id) return res.status(403).json({ msg: "Access denied" });
+    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) return res.status(403).json({ msg: "Access denied" });
 
     let targetUser = token.user;
 
@@ -302,247 +374,102 @@ export const updateToken = async (req: Request, res: Response) => {
       targetUser = newUser;
     }
 
-    const account = await accountRepo.findOne({
-      where: { user: { id: targetUser.id }, materialType: token.materialType },
-    });
-
+    const account = await accountRepo.findOne({ where: { user: { id: targetUser.id }, materialType: token.materialType } });
     if (!account) return res.status(400).json({ msg: "Material account not found" });
 
-    // ✅ Safe Weight Parsing
     const oldWeight = Number(token.weight || 0);
     const newWeight = (weight !== undefined && weight !== null && weight !== "") ? Number(weight) : oldWeight;
     const diff = newWeight - oldWeight;
 
-    // Check balance before proceeding
-    if (diff > 0 && diff > Number(account.remainingTons)) {
-      return res.status(400).json({
-        msg: `Insufficient balance. Available: ${account.remainingTons}`,
-      });
+    if (diff > 0 && diff > Number(account.remainingTons)) return res.status(400).json({ msg: `Insufficient balance. Available: ${account.remainingTons}` });
+
+    if (diff !== 0) {
+      account.remainingTons = Math.max(0, Number(account.remainingTons || 0) - diff);
+      (account as any).usedTons = Math.max(0, Number(account.totalTons || 0) - Number(account.remainingTons));
+      await accountRepo.save(account);
     }
 
     const ratePerTon = 180;
-    
-    // ✅ Safe Commission Parsing
     const safeCommission = (commission !== undefined && commission !== null && commission !== "") ? Number(commission) : Number(token.commission || 0);
 
-    // ✅ Safe Total Amount Parsing
-    const finalTotalAmount =
-      (totalAmount !== undefined && totalAmount !== null && totalAmount !== "")
-        ? Number(totalAmount)
-        : (newWeight * ratePerTon) + safeCommission;
+    if (token.materialType === "bedash") {
+      const sRate = Number(sellRate !== undefined ? sellRate : token.sellRate || 0);
+      const cRate = Number(cartingRate !== undefined ? cartingRate : token.cartingRate || 0);
+      const oRate = Number(tokenOwnerRate !== undefined ? tokenOwnerRate : token.tokenOwnerRate || 0);
 
-    const adminId = targetUser.role === "user" ? targetUser.creator?.id : targetUser.id;
+      token.sellRate = sRate;
+      token.cartingRate = cRate;
+      token.tokenOwnerRate = oRate;
 
-    // Update Token Fields
+      const totalSellAmount = sRate * newWeight;
+      const totalCartingAmount = cRate * newWeight;
+
+      token.totalAmount = totalSellAmount;
+      token.totalCarting = totalCartingAmount;
+
+      if (token.tokenOwnerType === "another") {
+        token.totalTokenOwnerAmount = oRate * newWeight;
+        token.commission = (sRate - cRate - oRate) * newWeight;
+      } else {
+        token.totalTokenOwnerAmount = 0;
+        token.commission = totalSellAmount - totalCartingAmount - (newWeight * 180);
+      }
+    } else {
+      const finalTotalAmount = (totalAmount !== undefined && totalAmount !== null && totalAmount !== "") ? Number(totalAmount) : (newWeight * ratePerTon) + safeCommission;
+      token.commission = safeCommission;
+      token.ratePerTon = ratePerTon;
+      token.totalAmount = finalTotalAmount;
+    }
+
     token.user = targetUser;
     if (truckNumber !== undefined) token.truckNumber = truckNumber;
     token.weight = newWeight;
-    token.commission = safeCommission;
-    token.ratePerTon = ratePerTon;
-    token.totalAmount = finalTotalAmount;
+    if (manualDate) token.updatedAt = new Date(manualDate);
 
-    if (manualDate) {
-      token.updatedAt = new Date(manualDate);
-    }
+    if (token.status === "pending" && newWeight > 0) token.status = "updated";
 
-    // 💾 Token Database me save karna (Taki auto-healing ise count kar sake)
     await tokenRepo.save(token);
 
-    // ==========================================
-    // 🧮 AUTO-HEALING STOCK CALCULATION
-    // ==========================================
-    if (account) {
-      // 1. User ke us material ki saari tokens nikalo
-      const allTokensForStock = await tokenRepo.find({
-        where: { user: { id: targetUser.id }, materialType: token.materialType }
-      });
+    const adminId = (targetUser.role === "user" ? targetUser.creator?.id : targetUser.id) ?? 0;
+    await syncLedgersAndStatuses(token, adminId);
 
-      // 2. Sabka weight jod kar Used Tons banao
-      let exactUsedTons = 0;
-      allTokensForStock.forEach(t => {
-        exactUsedTons += Number(t.weight || 0);
-      });
-
-      // 3. Total - Used = Remaining (Zero NaN chance)
-      account.usedTons = exactUsedTons;
-      account.remainingTons = Number(account.totalTons) - exactUsedTons;
-
-      await accountRepo.save(account);
-    }
-    // ==========================================
-
-    // Ledger Re-calculation
-    const prevTokenBeforeCurrent = await tokenRepo
-      .createQueryBuilder("t")
-      .leftJoin("t.user", "u")
-      .leftJoin("u.creator", "c")
-      .where("t.customerName = :customerName", { customerName: token.customerName })
-      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
-      .andWhere("t.id < :id", { id: token.id })
-      .orderBy("t.id", "DESC")
-      .getOne();
-
-    const previousCarryForward = prevTokenBeforeCurrent
-      ? Number(prevTokenBeforeCurrent.carryForward || 0)
-      : 0;
-
-    const allRelevantTokens = await tokenRepo
-      .createQueryBuilder("t")
-      .leftJoin("t.user", "u")
-      .leftJoin("u.creator", "c")
-      .where("t.customerName = :customerName", { customerName: token.customerName })
-      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
-      .andWhere("t.id >= :id", { id: token.id })
-      .orderBy("t.id", "ASC")
-      .getMany();
-
-    let runningCarry = previousCarryForward;
-
-    for (const t of allRelevantTokens) {
-      const tTotal = Number(t.totalAmount || 0);
-      const tPaid = Number(t.paidAmount || 0);
-
-      runningCarry = Number((runningCarry + tPaid - tTotal).toFixed(2));
-      t.carryForward = runningCarry;
-
-      if (tTotal > 0 && t.status === "pending") {
-        t.status = "updated";
-      }
-    }
-
-    if (allRelevantTokens.length > 0) {
-      await tokenRepo.save(allRelevantTokens);
-    }
-
-    // Ledger update ke baad, iss customer ki sabse aakhri token nikalein Final Balance show karne ke liye
-    const absoluteLatestToken = await tokenRepo
-      .createQueryBuilder("t")
-      .leftJoin("t.user", "u")
-      .leftJoin("u.creator", "c")
-      .where("t.customerName = :customerName", { customerName: token.customerName })
-      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
-      .orderBy("t.id", "DESC")
-      .getOne();
-
+    const absoluteLatestToken = await tokenRepo.createQueryBuilder("t").leftJoin("t.user", "u").leftJoin("u.creator", "c").where("t.customerName = :customerName", { customerName: token.customerName }).andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId }).orderBy("t.id", "DESC").getOne();
     const actualFinalCarry = absoluteLatestToken ? Number(absoluteLatestToken.carryForward) : Number(token.carryForward);
 
     const adminUser = targetUser.role === "user" ? targetUser.creator : targetUser;
     const adminPhone = (adminUser as any)?.phone;
-    const waInstance = (adminUser as any)?.whatsappInstanceId;
-    const waToken = (adminUser as any)?.whatsappToken;
-
-    // Token count calculation sirf Admin ke report ke liye
     const tokenInfo = await calculateAvailableTokens(targetUser.id, token.materialType);
 
     (async () => {
       try {
-        const prevCarryStr = previousCarryForward < 0
-          ? `-₹${Math.abs(previousCarryForward)} (BAKI / DUE)`
-          : `+₹${previousCarryForward} (ADVANCE)`;
-
         const currentBill = Number(token.totalAmount || 0);
         const paidAmt = Number(token.paidAmount || 0);
+        const previousCarryForward = actualFinalCarry + currentBill - paidAmt;
+        const prevCarryStr = previousCarryForward < 0 ? `-₹${Math.abs(previousCarryForward)} (BAKI / DUE)` : `+₹${previousCarryForward} (ADVANCE)`;
         const tokenCalculatedCarry = Number((previousCarryForward - currentBill + paidAmt).toFixed(2));
+        const carryAnswerText = tokenCalculatedCarry < 0 ? `-₹${Math.abs(tokenCalculatedCarry)} (BAKI / DUE)` : `+₹${tokenCalculatedCarry} (ADVANCE)`;
+        const actualCarryText = actualFinalCarry < 0 ? `-₹${Math.abs(actualFinalCarry)} (TOTAL DUE / BAKI)` : `+₹${actualFinalCarry} (TOTAL ADVANCE)`;
 
-        const carryAnswerText = tokenCalculatedCarry < 0
-          ? `-₹${Math.abs(tokenCalculatedCarry)} (BAKI / DUE)`
-          : `+₹${tokenCalculatedCarry} (ADVANCE)`;
-
-        const actualCarryText = actualFinalCarry < 0
-          ? `-₹${Math.abs(actualFinalCarry)} (TOTAL DUE / BAKI)`
-          : `+₹${actualFinalCarry} (TOTAL ADVANCE)`;
-
-        // 1. Message to CUSTOMER
         if (token.customerPhone) {
-          const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(
-            token.customerName,
-            adminId,
-            token.id
-          );
-
-          const customerMsg =
-            `✅ *Token Loaded & Updated!* ✅\n\n` +
-            `👤 Customer: *${token.customerName}*\n` +
-            `🎫 *Token ID:* #${token.id}\n` +
-            `📅 Date: ${new Date(token.updatedAt || new Date()).toLocaleDateString("en-GB")}\n` +
-            `👤 Dealer: *${targetUser.name}*\n` +
-            `🚛 Truck No: *${token.truckNumber}*\n` +
-            `📦 Material: *${token.materialType.toUpperCase()}*\n\n` +
-            `📊 *Billing Details:*\n` +
-            `• Loaded Weight: *${token.weight} Tons*\n` +
-            `• Rate Per Ton: ₹${token.ratePerTon} | Commission: ₹${token.commission}\n` +
-            `• 🧮 Bill Formula: (${token.weight}T × ₹${token.ratePerTon}) + ₹${token.commission} = *₹${currentBill}*\n` +
-            `• Current Bill Amount: *₹${currentBill}*\n` +
-            `• Paid for this Token: ₹${paidAmt}\n\n` +
-            `🔄 *Step Calculation (Till Token #${token.id}):*\n` +
-            `• Previous Carry Forward: *${prevCarryStr}*\n` +
-            `• Token Balance: (${previousCarryForward}) - (${currentBill}) + (${paidAmt}) = *${carryAnswerText}*\n\n` +
-            `📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n` +
-            `👉 *${actualCarryText}*\n\n` +
-            `⏳ Status: *${token.status.toUpperCase()}*\n` +
-            allDealersTokensSummary +
-            `\nThank you for doing business with us! - Bricks Admin`;
-
-          await sendWhatsAppReceipt(token.customerPhone, customerMsg, waInstance, waToken);
+          const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(token.customerName, adminId, token.id);
+          const formulaLine = token.materialType === "bedash" ? `• 🧮 Bill Formula: (${token.weight}T × ₹${token.sellRate}) = *₹${currentBill}*\n` : `• 🧮 Bill Formula: (${token.weight}T × ₹${token.ratePerTon}) + ₹${token.commission} = *₹${currentBill}*\n`;
+          const customerMsg = `✅ *Token Loaded & Updated!* ✅\n\n👤 Customer: *${token.customerName}*\n🎫 *Token ID:* #${token.id}\n📅 Date: ${new Date(token.updatedAt || new Date()).toLocaleDateString("en-GB")}\n👤 Dealer: *${targetUser.name}*\n🚛 Truck No: *${token.truckNumber}*\n📦 Material: *${token.materialType.toUpperCase()}*\n\n📊 *Billing Details:*\n• Loaded Weight: *${token.weight} Tons*\n` + formulaLine + `• Current Bill Amount: *₹${currentBill}*\n• Paid for this Token: ₹${paidAmt}\n\n🔄 *Step Calculation:*\n• Previous Carry Forward: *${prevCarryStr}*\n• Token Balance: *${carryAnswerText}*\n\n📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n👉 *${actualCarryText}*\n\n⏳ Status: *${token.status.toUpperCase()}*\n` + allDealersTokensSummary + `\nThank you for doing business with us! - Bricks Admin`;
+          
+          await sendWhatsAppReceipt(token.customerPhone, customerMsg, adminId);
         }
 
-        // 2. Message to ADMIN
         if (adminPhone) {
           const allDealerCustomersReport = await buildAllCustomersTokensForDealer(targetUser.id);
-
-          const adminAlertMsg =
-            `🚚 *Admin Alert: Token Updated* 🚚\n\n` +
-            `👤 Dealer: *${targetUser.name}*\n` +
-            `👤 Customer: *${token.customerName}*\n` +
-            `🎫 Token ID: *#${token.id}*\n` +
-            `🚛 Truck No: *${token.truckNumber}*\n` +
-            `⚖️ Loaded Weight: *${token.weight} Tons*\n` +
-            `💰 Bill: *₹${currentBill}*\n` +
-            `🔄 Token Balance Calculation: (${previousCarryForward}) - (${currentBill}) + (${paidAmt}) = *${carryAnswerText}*\n` +
-            `📌 *Customer Final Net Balance: ${actualCarryText}*\n` +
-            `📉 Exact Dealer Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n` +
-            `🎫 *Tokens Still Available to Issue:* *${tokenInfo.tokensAvailable} Tokens*\n` +
-            allDealerCustomersReport +
-            `- Bricks Admin Automated System`;
-
-          await sendWhatsAppReceipt(adminPhone, adminAlertMsg, waInstance, waToken);
-        }
-
-        // 3. Broadcast to other pending trucks (Customer stock alert)
-        const userPendingTokens = await tokenRepo
-          .createQueryBuilder("t")
-          .leftJoin("t.user", "u")
-          .where("t.status = :status", { status: "pending" })
-          .andWhere("t.materialType = :materialType", { materialType: token.materialType })
-          .andWhere("u.id = :targetUserId", { targetUserId: targetUser.id })
-          .andWhere("t.id != :currentId", { currentId: token.id })
-          .getMany();
-
-        const notifiedPhones = new Set<string>();
-
-        for (const pt of userPendingTokens) {
-          if (pt.customerPhone && !notifiedPhones.has(pt.customerPhone)) {
-            notifiedPhones.add(pt.customerPhone);
-            const broadcastMsg =
-              `🚨 *Stock Update Alert* 🚨\n\n` +
-              `Hello *${pt.customerName}*,\n\n` +
-              `Another truck was just loaded under dealer *${targetUser.name}*.\n\n` +
-              `📦 Material: *${token.materialType.toUpperCase()}*\n` +
-              `📉 Remaining Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n\n` +
-              `Please check balance before bringing your truck to load.\n\n- Bricks Admin System`;
-
-            await sendWhatsAppReceipt(pt.customerPhone, broadcastMsg, waInstance, waToken);
-          }
+          const adminAlertMsg = `🚚 *Admin Alert: Token Updated* 🚚\n\n👤 Dealer: *${targetUser.name}*\n👤 Customer: *${token.customerName}*\n🎫 Token ID: *#${token.id}*\n🚛 Truck No: *${token.truckNumber}*\n⚖️ Loaded Weight: *${token.weight} Tons*\n💰 Bill: *₹${currentBill}*\n📌 *Customer Final Net Balance: ${actualCarryText}*\n📉 Exact Dealer Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n🎫 *Tokens Still Available: *${tokenInfo.tokensAvailable} Tokens*\n` + allDealerCustomersReport + `- Bricks Admin Automated System`;
+          
+          await sendWhatsAppReceipt(adminPhone, adminAlertMsg, adminId);
         }
       } catch (waErr) {
         console.error("WhatsApp delivery failed on update:", waErr);
       }
     })();
 
-    return res.json({
-      msg: "✅ Token updated & Broadcast alert sent to user's pending trucks",
-      data: token,
-    });
+    return res.json({ msg: "✅ Token updated", data: token });
   } catch (err) {
     console.error("Update token error:", err);
     return res.status(500).json({ msg: "Server error" });
@@ -557,26 +484,19 @@ export const deleteToken = async (req: Request, res: Response) => {
     const { tokenId } = req.params;
     const currentUser = req.user!;
 
-    const token = await tokenRepo.findOne({
-      where: { id: Number(tokenId) },
-      relations: ["user", "user.creator"],
-    });
+    // 🛠️ FIX: Yahan { id } ki jagah { id: tokenId } pass kiya gaya hai
+    const token = await tokenRepo.createQueryBuilder("token")
+      .leftJoinAndSelect("token.user", "user")
+      .leftJoinAndSelect("user.creator", "creator") 
+      .where("token.id = :id", { id: tokenId })
+      .getOne();
 
     if (!token) return res.status(404).json({ msg: "Token not found" });
 
-    if (currentUser.role === "user" && currentUser.id !== token.user.id) {
-      return res.status(403).json({ msg: "Access denied" });
-    }
+    if (currentUser.role === "user" && currentUser.id !== token.user.id) return res.status(403).json({ msg: "Access denied" });
+    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) return res.status(403).json({ msg: "Access denied" });
 
-    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
-      return res.status(403).json({ msg: "Access denied: Not your user's token" });
-    }
-
-    if (token.status !== "pending") {
-      return res.status(400).json({
-        msg: "❌ Only pending tokens can be deleted",
-      });
-    }
+    if (token.status !== "pending") return res.status(400).json({ msg: "❌ Only pending tokens can be deleted" });
 
     const customerPhone = token.customerPhone;
     const customerName = token.customerName;
@@ -586,75 +506,44 @@ export const deleteToken = async (req: Request, res: Response) => {
     const dealerName = dealerUser?.name || "N/A";
 
     const adminUser = dealerUser.role === "user" ? dealerUser.creator : dealerUser;
-    const adminId = adminUser?.id;
+    const adminId = adminUser?.id ?? 0;
     const adminPhone = (adminUser as any)?.phone;
-    const waInstance = (adminUser as any)?.whatsappInstanceId;
-    const waToken = (adminUser as any)?.whatsappToken;
+
+    if (token.weight > 0) {
+      const materialAccount = await accountRepo.findOne({ where: { user: { id: token.user.id }, materialType: token.materialType as any } });
+      if (materialAccount) {
+        materialAccount.remainingTons = Number(materialAccount.remainingTons || 0) + Number(token.weight);
+        (materialAccount as any).usedTons = Math.max(0, Number(materialAccount.totalTons || 0) - Number(materialAccount.remainingTons));
+        await accountRepo.save(materialAccount);
+      }
+    }
 
     await tokenRepo.remove(token);
-
-    // Deletion ke baad token count restored calculation (Sirf admin ke liye)
     const tokenInfo = await calculateAvailableTokens(dealerUser.id, materialType);
-
-    const latestTokenAfterDelete = await tokenRepo
-      .createQueryBuilder("t")
-      .leftJoin("t.user", "u")
-      .leftJoin("u.creator", "c")
-      .where("t.customerName = :customerName", { customerName })
-      .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
-      .orderBy("t.id", "DESC")
-      .getOne();
-
+   const latestTokenAfterDelete = await tokenRepo.createQueryBuilder("t")
+  .leftJoin("t.user", "u")
+  .leftJoin("u.creator", "c") // ✅ FIX: t.creator ki jagah u.creator aayega
+  .where("t.customerName = :customerName", { customerName })
+  .andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId })
+  .orderBy("t.id", "DESC")
+  .getOne();
     const finalCarry = latestTokenAfterDelete ? Number(latestTokenAfterDelete.carryForward) : 0;
-    const carryText = finalCarry < 0 
-      ? `₹${Math.abs(finalCarry)} (TOTAL DUE / BAKI)` 
-      : `₹${finalCarry} (TOTAL ADVANCE)`;
+    const carryText = finalCarry < 0 ? `₹${Math.abs(finalCarry)} (TOTAL DUE / BAKI)` : `₹${finalCarry} (TOTAL ADVANCE)`;
 
     (async () => {
       try {
-        // 1. Message to CUSTOMER
         if (customerPhone) {
-          const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(
-            customerName,
-            adminId,
-            deletedTokenId
-          );
-
-          const cancelMsg =
-            `❌ *Token Cancelled & Removed!* ❌\n\n` +
-            `👤 Customer: *${customerName}*\n` +
-            `🎫 *Cancelled Token ID:* #${deletedTokenId}\n` +
-            `📅 Date: ${new Date().toLocaleDateString("en-GB")}\n` +
-            `👤 Dealer: *${dealerName}*\n` +
-            `📦 Material: *${materialType.toUpperCase()}*\n\n` +
-            `📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n` +
-            `👉 *${carryText}*\n` +
-            allDealersTokensSummary +
-            `\nPlease contact your dealer for any clarification.\n\n- Bricks Admin System`;
-
-          await sendWhatsAppReceipt(customerPhone, cancelMsg, waInstance, waToken);
+          const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(customerName, adminId, deletedTokenId);
+          const cancelMsg = `❌ *Token Cancelled & Removed!* ❌\n\n👤 Customer: *${customerName}*\n🎫 *Cancelled Token ID:* #${deletedTokenId}\n📅 Date: ${new Date().toLocaleDateString("en-GB")}\n👤 Dealer: *${dealerName}*\n📦 Material: *${materialType.toUpperCase()}*\n\n📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n👉 *${carryText}*\n` + allDealersTokensSummary + `\nPlease contact your dealer for any clarification.\n\n- Bricks Admin System`;
+          
+          await sendWhatsAppReceipt(customerPhone, cancelMsg, adminId);
         }
 
-        // 2. Message to ADMIN
         if (adminPhone) {
-          const allDealerCustomersReport = await buildAllCustomersTokensForDealer(
-            dealerUser.id,
-            deletedTokenId
-          );
-
-          const adminAlertMsg =
-            `🗑️ *Admin Alert: Pending Token Deleted* 🗑️\n\n` +
-            `👤 Dealer: *${dealerName}*\n` +
-            `👤 Customer: *${customerName}*\n` +
-            `🎫 Deleted Token ID: *#${deletedTokenId}*\n` +
-            `📦 Material: *${materialType.toUpperCase()}*\n` +
-            `📌 Customer Final Net Balance: *${carryText}*\n` +
-            `📉 Dealer Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n` +
-            `🎫 *Tokens Still Available to Issue:* *${tokenInfo.tokensAvailable} Tokens*\n` +
-            allDealerCustomersReport +
-            `- Bricks Admin Automated System`;
-
-          await sendWhatsAppReceipt(adminPhone, adminAlertMsg, waInstance, waToken);
+          const allDealerCustomersReport = await buildAllCustomersTokensForDealer(dealerUser.id, deletedTokenId);
+          const adminAlertMsg = `🗑️ *Admin Alert: Pending Token Deleted* 🗑️\n\n👤 Dealer: *${dealerName}*\n👤 Customer: *${customerName}*\n🎫 Deleted Token ID: *#${deletedTokenId}*\n📦 Material: *${materialType.toUpperCase()}*\n📌 Customer Final Net Balance: *${carryText}*\n📉 Dealer Stock: *${tokenInfo.actualRemainingTons.toFixed(2)} Tons*\n🎫 *Tokens Still Available: *${tokenInfo.tokensAvailable} Tokens*\n` + allDealerCustomersReport + `- Bricks Admin Automated System`;
+          
+          await sendWhatsAppReceipt(adminPhone, adminAlertMsg, adminId);
         }
       } catch (error) {
         console.error("WhatsApp delivery failed on delete:", error);
@@ -673,7 +562,7 @@ export const deleteToken = async (req: Request, res: Response) => {
 // ==========================================
 export const confirmToken = async (req: Request, res: Response) => {
   try {
-    const { tokenId, paidAmount } = req.body;
+    const { tokenId, paidAmount, cartingPaidAmount, tokenOwnerPaidAmount } = req.body;
     const currentUser = req.user!;
 
     const token = await tokenRepo.findOne({
@@ -683,15 +572,10 @@ export const confirmToken = async (req: Request, res: Response) => {
 
     if (!token) return res.status(404).json({ msg: "Token not found" });
 
-    if (currentUser.role === "user" && currentUser.id !== token.user.id) {
-      return res.status(403).json({ msg: "Access denied" });
-    }
+    if (currentUser.role === "user" && currentUser.id !== token.user.id) return res.status(403).json({ msg: "Access denied" });
+    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) return res.status(403).json({ msg: "Access denied" });
 
-    if (currentUser.role === "admin" && token.user.creator?.id !== currentUser.id) {
-      return res.status(403).json({ msg: "Access denied: Not your user's token" });
-    }
-
-    const adminId = token.user.role === "user" ? token.user.creator?.id : token.user.id;
+    const adminId = (token.user.role === "user" ? token.user.creator?.id : token.user.id) ?? 0;
 
     const tokens = await tokenRepo
       .createQueryBuilder("t")
@@ -719,21 +603,39 @@ export const confirmToken = async (req: Request, res: Response) => {
         t.confirmedAt = new Date();
         remainingPayment -= payNow;
 
-        paymentDetails.push({
+        const detailObj: any = {
           tokenId: t.id,
           userName: t.user.name,
           customerName: t.customerName,
           truckNumber: t.truckNumber || "N/A",
           materialType: t.materialType,
           weight: t.weight,
-          ratePerTon: t.ratePerTon || 180,
+          ratePerTon: t.materialType === "bedash" ? t.sellRate : (t.ratePerTon || 180),
           commission: t.commission || 0,
           totalAmount: total,
           paidThisTime: payNow,
           totalPaidNow: t.paidAmount,
           dueNow: total - t.paidAmount,
           isFullyCleared: t.paidAmount >= total,
-        });
+        };
+
+        if (t.materialType === "bedash") {
+          detailObj.sellRate = t.sellRate;
+          detailObj.cartingRate = t.cartingRate;
+          detailObj.totalCarting = t.totalCarting;
+          detailObj.cartingOwnerName = t.cartingOwnerName;
+          detailObj.tokenOwnerType = t.tokenOwnerType;
+          detailObj.cartingCarryForward = t.cartingCarryForward;
+
+          if (t.tokenOwnerType === "another") {
+            detailObj.anotherTokenOwnerName = t.anotherTokenOwnerName;
+            detailObj.tokenOwnerRate = t.tokenOwnerRate;
+            detailObj.totalTokenOwnerAmount = t.totalTokenOwnerAmount;
+            detailObj.tokenOwnerCarryForward = t.tokenOwnerCarryForward;
+          }
+        }
+
+        paymentDetails.push(detailObj);
       }
     }
 
@@ -743,111 +645,84 @@ export const confirmToken = async (req: Request, res: Response) => {
       lastToken.confirmedAt = new Date();
     }
 
-    let runningCarry = 0;
-    for (const t of tokens) {
-      const tTotal = Number(t.totalAmount || 0);
-      const tPaid = Number(t.paidAmount || 0);
-
-      runningCarry = Number((runningCarry + tPaid - tTotal).toFixed(2));
-      t.carryForward = runningCarry;
-
-      if (tTotal > 0) {
-        t.status = runningCarry >= 0 ? "completed" : "updated";
-      }
+    const currentTokenObj = tokens.find(t => t.id === Number(tokenId));
+    if (currentTokenObj) {
+      currentTokenObj.cartingPaidAmount = Number(currentTokenObj.cartingPaidAmount || 0) + Number(cartingPaidAmount || 0);
+      currentTokenObj.tokenOwnerPaidAmount = Number(currentTokenObj.tokenOwnerPaidAmount || 0) + Number(tokenOwnerPaidAmount || 0);
+      currentTokenObj.confirmedAt = new Date();
     }
 
     await tokenRepo.save(tokens);
+
+    if (currentTokenObj) {
+      await syncLedgersAndStatuses(currentTokenObj, adminId);
+    }
+
+    const detailsPayload: any = {
+      confirmedTokens: paymentDetails,
+      advanceLeft: remainingPayment > 0 ? remainingPayment : 0,
+    };
+
+    if (token.materialType === "bedash") {
+      detailsPayload.cartingPaidThisTime = Number(cartingPaidAmount || 0);
+      if (token.tokenOwnerType === "another") {
+        detailsPayload.ownerPaidThisTime = Number(tokenOwnerPaidAmount || 0);
+      }
+    }
 
     const history = paymentHistoryRepo.create({
       user: token.user,
       admin: { id: currentUser.id } as any,
       type: "token_payment",
       amount: paidAmount,
-      details: {
-        confirmedTokens: paymentDetails,
-        advanceLeft: remainingPayment > 0 ? remainingPayment : 0,
-      },
+      details: detailsPayload,
     });
     await paymentHistoryRepo.save(history);
 
     const adminUser = token.user.role === "user" ? token.user.creator : token.user;
     const adminPhone = (adminUser as any)?.phone;
-    const waInstance = (adminUser as any)?.whatsappInstanceId;
-    const waToken = (adminUser as any)?.whatsappToken;
 
     (async () => {
       try {
+        const absoluteLatestToken = await tokenRepo.createQueryBuilder("t").leftJoin("t.user", "u").leftJoin("u.creator", "c").where("t.customerName = :customerName", { customerName: token.customerName }).andWhere("(c.id = :adminId OR u.id = :adminId)", { adminId }).orderBy("t.id", "DESC").getOne();
+        const actualFinalCarry = absoluteLatestToken ? Number(absoluteLatestToken.carryForward) : 0;
+        const netCarryText = actualFinalCarry < 0 ? `₹${Math.abs(actualFinalCarry)} (TOTAL DUE / BAKI)` : `₹${actualFinalCarry} (TOTAL ADVANCE)`;
+
         const fullyClearedTokens = paymentDetails.filter((p) => p.isFullyCleared);
         const partiallyPaidTokens = paymentDetails.filter((p) => !p.isFullyCleared);
 
         let paymentBreakdownText = `\n💳 *Payment Settlement Breakdown:*\n`;
-
         if (fullyClearedTokens.length > 0) {
           paymentBreakdownText += `\n✅ *Fully Cleared Tokens:*\n`;
-          fullyClearedTokens.forEach((p) => {
-            paymentBreakdownText += `• 🎫 Token #${p.tokenId} (${p.materialType}): ₹${p.paidThisTime} received (Total ₹${p.totalAmount} Cleared)\n`;
-          });
+          fullyClearedTokens.forEach((p) => { paymentBreakdownText += `• 🎫 Token #${p.tokenId} (${p.materialType}): ₹${p.paidThisTime} received (Total ₹${p.totalAmount} Cleared)\n`; });
         }
-
         if (partiallyPaidTokens.length > 0) {
           paymentBreakdownText += `\n⏳ *Partially Cleared (Still Pending):*\n`;
           partiallyPaidTokens.forEach((p) => {
-            paymentBreakdownText += `• 🎫 Token #${p.tokenId} (${p.materialType}):\n`;
-            paymentBreakdownText += `   Bill: ₹${p.totalAmount} | Received: ₹${p.paidThisTime}\n`;
-            paymentBreakdownText += `   Total Paid: ₹${p.totalPaidNow} | *Baki Due: ₹${p.dueNow}*\n`;
+            paymentBreakdownText += `• 🎫 Token #${p.tokenId} (${p.materialType}):\n   Bill: ₹${p.totalAmount} | Received: ₹${p.paidThisTime}\n   Total Paid: ₹${p.totalPaidNow} | *Baki Due: ₹${p.dueNow}*\n`;
           });
         }
-
         if (remainingPayment > 0) {
           paymentBreakdownText += `\n🎁 *Extra Advance Deposited:* ₹${remainingPayment}\n`;
         }
 
-        const netCarryText = runningCarry < 0 
-          ? `₹${Math.abs(runningCarry)} (TOTAL DUE / BAKI)` 
-          : `₹${runningCarry} (TOTAL ADVANCE)`;
+        const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(token.customerName, adminId);
+        const confirmMsg = `💰 *Payment Received & Account Balanced!* 💰\n\n👤 Customer: *${token.customerName}*\n📅 Date: ${new Date().toLocaleDateString("en-GB")}\n💵 *Total Amount Paid:* ₹${paidAmount}\n` + paymentBreakdownText + `\n📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n👉 *${netCarryText}*\n` + allDealersTokensSummary + `\nThank you for prompt settlement! - Bricks Admin`;
 
-        const allDealersTokensSummary = await buildCustomerAllDealersTokensSummary(
-          token.customerName,
-          adminId
-        );
-
-        const confirmMsg =
-          `💰 *Payment Received & Account Balanced!* 💰\n\n` +
-          `👤 Customer: *${token.customerName}*\n` +
-          `📅 Date: ${new Date().toLocaleDateString("en-GB")}\n` +
-          `💵 *Total Amount Paid:* ₹${paidAmount}\n` +
-          paymentBreakdownText +
-          `\n📌 *CUSTOMER FINAL ACCOUNT BALANCE:*\n` +
-          `👉 *${netCarryText}*\n` +
-          allDealersTokensSummary +
-          `\nThank you for prompt settlement! - Bricks Admin`;
-
-        if (token.customerPhone) {
-          await sendWhatsAppReceipt(token.customerPhone, confirmMsg, waInstance, waToken);
-        }
+        if (token.customerPhone) await sendWhatsAppReceipt(token.customerPhone, confirmMsg, adminId);
 
         if (adminPhone) {
           const allDealerCustomersReport = await buildAllCustomersTokensForDealer(token.user.id);
-          const adminConfirmMsg =
-            `💰 *Admin Alert: Payment Received* 💰\n\n` +
-            `👤 Dealer: *${token.user.name}*\n` +
-            `👤 Customer: *${token.customerName}*\n` +
-            `💵 Paid Amount: *₹${paidAmount}*\n` +
-            `📌 Customer Final Net Balance: *${netCarryText}*\n` +
-            allDealerCustomersReport +
-            `- Bricks Admin Automated System`;
-
-          await sendWhatsAppReceipt(adminPhone, adminConfirmMsg, waInstance, waToken);
+          const adminConfirmMsg = `💰 *Admin Alert: Payment Received* 💰\n\n👤 Dealer: *${token.user.name}*\n👤 Customer: *${token.customerName}*\n💵 Paid Amount: *₹${paidAmount}*\n📌 Customer Final Net Balance: *${netCarryText}*\n` + allDealerCustomersReport + `- Bricks Admin Automated System`;
+          
+          await sendWhatsAppReceipt(adminPhone, adminConfirmMsg, adminId);
         }
       } catch (waErr) {
         console.error("WhatsApp delivery failed on confirm payment:", waErr);
       }
     })();
 
-    return res.json({
-      msg: "✅ Ledger balanced and payment recorded in History",
-      customerName: token.customerName,
-    });
+    return res.json({ msg: "✅ Ledger balanced and payment recorded in History", customerName: token.customerName });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ msg: "Server error" });
@@ -869,12 +744,8 @@ export const getAllTokens = async (req: Request, res: Response) => {
 
     if (!targetUser) return res.status(404).json({ msg: "User not found" });
 
-    if (currentUser.role === "user" && currentUser.id !== targetUser.id) {
-      return res.status(403).json({ msg: "Access denied" });
-    }
-    if (currentUser.role === "admin" && targetUser.creator?.id !== currentUser.id) {
-      return res.status(403).json({ msg: "Access denied: Not your user" });
-    }
+    if (currentUser.role === "user" && currentUser.id !== targetUser.id) return res.status(403).json({ msg: "Access denied" });
+    if (currentUser.role === "admin" && targetUser.creator?.id !== currentUser.id) return res.status(403).json({ msg: "Access denied: Not your user" });
 
     const tokens = await tokenRepo.find({
       where: { user: { id: targetUser.id } },
@@ -893,25 +764,14 @@ export const getAdminAllUserTokens = async (req: Request, res: Response) => {
   try {
     const currentUser = req.user!;
 
-    if (currentUser.role === "user") {
-      return res.status(403).json({ msg: "Access denied" });
-    }
+    if (currentUser.role === "user") return res.status(403).json({ msg: "Access denied" });
 
     let users: User[] = [];
-
-    if (currentUser.role === "superadmin") {
-      users = await userRepo.find({ where: { role: "user" } });
-    } else {
-      users = await userRepo.find({
-        where: { role: "user", creator: { id: currentUser.id } },
-      });
-    }
+    if (currentUser.role === "superadmin") users = await userRepo.find({ where: { role: "user" } });
+    else users = await userRepo.find({ where: { role: "user", creator: { id: currentUser.id } } });
 
     const userIds = users.map((u) => u.id);
-
-    if (userIds.length === 0) {
-      return res.json({ msg: "✅ Admin token report fetched", totalTokens: 0, data: [] });
-    }
+    if (userIds.length === 0) return res.json({ msg: "✅ Admin token report fetched", totalTokens: 0, data: [] });
 
     const tokens = await tokenRepo.find({
       where: { user: { id: In(userIds) } },
@@ -947,13 +807,23 @@ export const getAdminAllUserTokens = async (req: Request, res: Response) => {
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
       confirmedAt: t.confirmedAt,
+      cartingOwnerName: t.cartingOwnerName,
+      cartingOwnerPhone: t.cartingOwnerPhone,
+      tokenOwnerType: t.tokenOwnerType,
+      anotherTokenOwnerName: t.anotherTokenOwnerName,
+      anotherTokenOwnerPhone: t.anotherTokenOwnerPhone,
+      sellRate: t.sellRate,
+      cartingRate: t.cartingRate,
+      totalCarting: t.totalCarting,
+      tokenOwnerRate: t.tokenOwnerRate,
+      totalTokenOwnerAmount: t.totalTokenOwnerAmount,
+      cartingPaidAmount: t.cartingPaidAmount,
+      cartingCarryForward: t.cartingCarryForward,
+      tokenOwnerPaidAmount: t.tokenOwnerPaidAmount,
+      tokenOwnerCarryForward: t.tokenOwnerCarryForward,
     }));
 
-    return res.json({
-      msg: "✅ Admin token report fetched",
-      totalTokens: table.length,
-      data: table,
-    });
+    return res.json({ msg: "✅ Admin token report fetched", totalTokens: table.length, data: table });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ msg: "Server error" });
@@ -968,25 +838,18 @@ export const sendUserReportToWhatsApp = async (req: Request, res: Response) => {
     const user = await userRepo.findOne({ where: { id: userId }, relations: ["creator"] });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    const tokens = await tokenRepo.find({
-      where: { user: { id: user.id } },
-      order: { id: "DESC" },
-    });
-
-    const accounts = await accountRepo.find({
-      where: { user: { id: user.id } },
-    });
+    const tokens = await tokenRepo.find({ where: { user: { id: user.id } }, order: { id: "DESC" } });
+    const accounts = await accountRepo.find({ where: { user: { id: user.id } } });
 
     const adminUser = user.role === "user" ? user.creator : user;
     const adminPhone = (user as any).phone || (adminUser as any)?.phone;
+    const adminId = adminUser?.id || currentUser.id;
 
-    if (!adminPhone) {
-      return res.status(400).json({ msg: "❌ User phone number not found for WhatsApp" });
-    }
+    if (!adminPhone) return res.status(400).json({ msg: "❌ User phone number not found for WhatsApp" });
 
+    // ⭐ Naya Free WhatsApp Admin ID parameter pass kiya gaya hai
     await generateAndSendUserReportPDF(user, tokens, accounts, {
-      instanceId: (adminUser as any)?.whatsappInstanceId,
-      token: (adminUser as any)?.whatsappToken,
+      adminId: adminId,
       phone: adminPhone,
     });
 
